@@ -16,3 +16,11 @@ This application is only a networking bridge between other clients over the inte
 DCS aircraft. It is intended to be agnostic of specific aircraft and their necessary syncing logic. To take full advantage of this 
 application, a user will need to write a RakNet connection class in their aircraft code to connect to the external application and 
 the user will need to write all of the logic for integration of the syncing data into their aircraft code. 
+
+## Building the Application
+Download [Qt](https://www.qt.io/download) and make sure to install QT <version> MSVC 2015 64-bit.  This program has been previously built successfully with Qt 5.12.3.  In the Qt Creator application, make sure the Qt <version> MSVC 2015 64bit kit is selected and the Build type is Release.
+RakNet dependencies are already included in this package in the 3rdparty folder and is statically linked into the executable when built.
+
+## Deploying the Application
+Use the built-in Qt windows deployment tool windeployqt.exe on the deployment directory containing the built DCS_Copilot.exe and it will 
+automatically pull all of the dependencies into the directory.
