@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
-    //QCoreApplication::setOrganizationName("");
+    QCoreApplication::setOrganizationName("Cory Parks");
     QCoreApplication::setApplicationName("DCS Copilot");
     //QCoreApplication::setApplicationVersion(QStringLiteral("%1.%2.%3.%4").arg(Version::MAJOR).arg(Version::MINOR).arg(Version::REVISION).arg(Version::BUILD))
 
