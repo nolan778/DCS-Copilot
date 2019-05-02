@@ -21,6 +21,7 @@ INCLUDES
 #include <vector>
 
 #include "NetworkTypes.h"
+#include "PacketPriority.h"
 
 #include "RakNetTypes.h"
 #include "RakString.h"
@@ -98,13 +99,14 @@ class Network : public QObject
 
 signals:
     void receivedSeatChange(int seatNumber);
-    void receivedNetCommand(int command);
-    void receivedNetCommandValue(int command, float value, bool reliable);
+    void receivedNetCommand(unsigned short command);
+    void receivedNetCommandValue(unsigned short command, float value, bool deadReckoned, float valueRate);
 
 public slots:
     void handleLocalConnected();
-    void handleReceivedLocalCommand(int command);
-    void handleReceivedLocalCommandValue(int command, float value, bool reliable);
+    void handleReceivedLocalCommand(unsigned short command, PacketPriority priority, PacketReliability reliability, char orderingChannel);
+    void handleReceivedLocalCommandValue(unsigned short command, PacketPriority priority, PacketReliability reliability, char orderingChannel, NetCompressionTypes compressionType, float value, bool deadReckoned, float valueRate);
+    void handleReceivedLocalCorrectionCommandValue(unsigned short command, float value);
 
 public:
     /// Constructor
@@ -226,6 +228,8 @@ private:
 
     RakNet::RakString readBitStreamString(RakNet::Packet *packet);
     const char* readBitStreamCharArray(RakNet::Packet *packet);
+
+    static const float maxValueRate;
 
     void writeOutput(const QString& q) const;
     void updateServerStatus(int status) const;

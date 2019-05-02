@@ -23,6 +23,10 @@ INCLUDES
 DEFINITIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
 
+#define GETMASK(index, size) (((1 << (size)) - 1) << (index))
+#define READFROM(data, index, size) (((data) & GETMASK((index), (size))) >> (index))
+#define WRITETO(data, index, size, value) ((data) = ((data) & (~GETMASK((index), (size)))) | ((value) << (index)))
+
 namespace Network {
 
 	enum ConnectionState
@@ -76,6 +80,18 @@ namespace Network {
 
 		/// How many actual bytes were received, including overead and acks.
 		ACTUAL_BYTES_RECEIVED,
+    };
+
+    enum NetCompressionTypes
+    {
+        BINARY = 0,
+        FLOAT16,
+        FLOAT32,
+        FLOAT64,
+        NEG_ONE_ZERO_POS_ONE,
+        ZERO_HALF_ONE,
+
+        NUM_NET_COMPRESSION_TYPES,
     };
 }
 

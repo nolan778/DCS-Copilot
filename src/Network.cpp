@@ -27,6 +27,7 @@ INCLUDES
 #include <string>
 #include <map>
 #include <array>
+#include <bitset>
 
 #include "RakPeerInterface.h"
 #include "RakNetStatistics.h"
@@ -52,7 +53,7 @@ enum CustomNetworkMessages
     ID_NET_CLIENT_SEAT_BROADCAST,
     ID_NET_COMMAND,
     ID_NET_COMMAND_VALUE,
-    ID_NET_UNRELIABLE_COMMAND_VALUE,
+    ID_NET_CORRECTION_COMMAND_VALUE,
 };
 
 namespace Network {
@@ -60,6 +61,8 @@ namespace Network {
 /*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 CLASS IMPLEMENTATION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
+
+const float Network::maxValueRate = 100.0f;
 
 class Network::Impl
 {
@@ -111,7 +114,7 @@ public:
     std::string removeClient(RakNet::RakNetGUID guid)
     {
         {
-            auto& it = clientMap.find(guid);
+            auto it = clientMap.find(guid);
             if (it != clientMap.end()) {
                 //client found in list, so remove
                 clientMap.erase(it);
@@ -119,7 +122,7 @@ public:
         }
         std::string clientNameStr = "Unknown Client";
         {
-            auto& it = clientNameMap.find(guid);
+            auto it = clientNameMap.find(guid);
             if (it != clientNameMap.end()) {
                 //client found in list, so remove
                 clientNameStr = it->second;
@@ -271,6 +274,7 @@ bool Network::startServer(unsigned short port, std::string clientName, std::stri
 
         window->addClient(client.ID.ToString(), clientListName.c_str());
 
+        window->setServerIP(getServerAddress().c_str());
         window->setMaxSeats(getMaxClients());
 
         return true;
@@ -394,6 +398,7 @@ void Network::disconnect()
     writeOutput("Disconnecting from the server ...");
     mImpl->resetServerInfo();
     window->clearClients();
+    window->resetStatistics();
 }
 
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -404,7 +409,7 @@ void Network::requestSeat(int seatNumber)
         if (seatNumber <= getMaxClients()) {
             //Host has authority to grant its own permission
 
-            auto& it = mImpl->clientMap.find(mImpl->myGUID);
+            auto it = mImpl->clientMap.find(mImpl->myGUID);
             if (it != mImpl->clientMap.end()) {
                 bool seatRequestAccepted = true;
                 if (it->second.seatNumber == seatNumber) {
@@ -621,6 +626,7 @@ void Network::update()
                 writeOutput("Disconnected from the server.");
                 updateServerStatus(SS_NOT_CONNECTED);
                 window->clearClients();
+                window->resetStatistics();
             }
             break;
         }
@@ -652,6 +658,7 @@ void Network::update()
                 writeOutput("<font color='red'>ERROR:</font> Connection to the server was lost.");
                 updateServerStatus(SS_NOT_CONNECTED);
                 window->clearClients();
+                window->resetStatistics();
             }
             break;
         }
@@ -787,6 +794,7 @@ void Network::update()
                     }
                 }
 
+                window->setServerIP(getServerAddress().c_str());
                 //window->setMaxSeats(getMaxClients());
             }
             break;
@@ -813,11 +821,13 @@ void Network::update()
                     mImpl->clientInfoList.push_back(clientInfo);
                     //printf("[%hu] %s (%s)\t\t%d\n", us, clientInfo.name.c_str(), clientInfo.ID.ToString(), clientInfo.ping);
 
-                    if (clientInfo.ID == mImpl->myGUID)
+                    if (clientInfo.ID == mImpl->myGUID) {
                         mImpl->myPing = clientInfo.ping;
+                        window->setMyPing(mImpl->myPing);
+                    }
 
                     //add latest ping to client map info
-                    auto& it = mImpl->clientMap.find(clientInfo.ID);
+                    auto it = mImpl->clientMap.find(clientInfo.ID);
                     if (it != mImpl->clientMap.end()) {
                         it->second.ping = clientInfo.ping;
                     }
@@ -846,7 +856,7 @@ void Network::update()
                 if (guid != RakNet::UNASSIGNED_RAKNET_GUID) {
                     //add latest seat info to client
                     if (seatNumber <= getMaxClients()) {
-                        auto& it = mImpl->clientMap.find(guid);
+                        auto it = mImpl->clientMap.find(guid);
                         if (it != mImpl->clientMap.end()) {
                             bool seatRequestAccepted = true;
                             if (it->second.seatNumber == seatNumber) {
@@ -907,10 +917,27 @@ void Network::update()
         {
             if (mImpl->mySeat > 0 || mImpl->isHost)
             {
-                int command = -1;
+                unsigned short command = 0;
+                char orderingChannel = 0;
+                unsigned char priorityChar = 1;
+                unsigned char reliabilityChar = 3;
+                unsigned char packetInfo;
+
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
+
                 bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
-                bsIn.ReadBitsFromIntegerRange(command, 0, 65535);
+                bsIn.Read(orderingChannel);
+
+                bsIn.Read(packetInfo);
+                //bsIn.ReadBits((unsigned char *)(&(priorityChar)), 2);
+                //bsIn.ReadBits((unsigned char *)(&(reliabilityChar)), 3);
+                bsIn.Read(command);
+                priorityChar = READFROM(packetInfo,0,2);
+                reliabilityChar = READFROM(packetInfo,2,3);
+
+                PacketPriority priority = static_cast<PacketPriority>(priorityChar);
+                PacketReliability reliability = static_cast<PacketReliability>(reliabilityChar);
+
                 emit receivedNetCommand(command);
                 writeOutput(QString("Net Command (%1)").arg(command));
 
@@ -918,43 +945,204 @@ void Network::update()
                     //pass along to all other clients except the sender
                     RakNet::BitStream bsOut;
                     bsOut.Write((RakNet::MessageID)ID_NET_COMMAND);
-                    bsOut.WriteBitsFromIntegerRange(command, 0, 65535);
-                    mImpl->peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, true);
+                    bsOut.Write(command);
+                    bsOut.Write(orderingChannel);
+                    //bsOut.WriteBits((const unsigned char *)&priorityChar, 2);
+                    //bsOut.WriteBits((const unsigned char *)&reliabilityChar, 3);
+                    //packetInfo = priorityChar | (unsigned char)(reliabilityChar << 2);
+                    bsOut.Write(packetInfo);
+                    mImpl->peer->Send(&bsOut, priority, reliability, orderingChannel, packet->systemAddress, true);
                 }
             }
 
             break;
         }
-        case ID_NET_COMMAND_VALUE:
-        case ID_NET_UNRELIABLE_COMMAND_VALUE:
+       case ID_NET_COMMAND_VALUE:
+       {
+           if (mImpl->mySeat > 0 || mImpl->isHost)
+           {
+               unsigned short command = 0;
+               unsigned char bitValue = 0;
+               float value = 0.f;
+               float valueRate = 0.f;
+               char orderingChannel = 0;
+               unsigned char priorityChar;
+               unsigned char reliabilityChar;
+               unsigned char compressionTypeChar;
+               unsigned char packetInfo;
+               bool deadReckoned = false;
+
+               RakNet::BitStream bsIn(packet->data, packet->length, false);
+               bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
+               bsIn.Read(orderingChannel);
+               bsIn.Read(packetInfo);
+               //bsIn.ReadBits((unsigned char *)(&(priorityChar)), 2);
+               //bsIn.ReadBits((unsigned char *)(&(reliabilityChar)), 3);
+               //bsIn.ReadBits((unsigned char *)(&(compressionTypeChar)), 3);
+               bsIn.Read(command);
+               priorityChar = READFROM(packetInfo,0,2);
+               reliabilityChar = READFROM(packetInfo,2,3);
+               compressionTypeChar = READFROM(packetInfo,5,3);
+
+               PacketPriority priority = static_cast<PacketPriority>(priorityChar);
+               PacketReliability reliability = static_cast<PacketReliability>(reliabilityChar);
+               NetCompressionTypes compressionType = static_cast<NetCompressionTypes>(compressionTypeChar);
+
+               switch (compressionType)
+               {
+                   case BINARY:
+                       bitValue = bsIn.ReadBit();
+                       value = (bitValue > 0) ? 1.0f : 0.0f;
+                       break;
+                   case FLOAT16:
+                       bsIn.ReadFloat16(value, -1.0f, 1.0f);
+                       if (bsIn.GetNumberOfUnreadBits() > 7) {
+                           deadReckoned = true;
+                           bsIn.ReadFloat16(valueRate, -maxValueRate, maxValueRate);
+                       }
+                       break;
+                   case FLOAT32:
+                       bsIn.Read(value);
+                       if (bsIn.GetNumberOfUnreadBits() > 7) {
+                           deadReckoned = true;
+                           bsIn.Read(valueRate);
+                       }
+                       break;
+                   //case FLOAT64:
+                   //	bsIn.Read(dValue);
+                   //	break;
+                   case NEG_ONE_ZERO_POS_ONE:
+                   {
+                       bsIn.ReadBits((unsigned char *)(&(bitValue)), 2);
+                       if (bitValue == 0) {
+                           value = -1.0f;
+                       }
+                       else if (bitValue == 1) {
+                           value = 0.0f;
+                       }
+                       else {
+                           value = 1.0f;
+                       }
+                       break;
+                   }
+                   case ZERO_HALF_ONE:
+                   {
+                       bsIn.ReadBits((unsigned char *)(&(bitValue)), 2);
+                       if (bitValue == 0) {
+                           value = 0.0f;
+                       }
+                       else if (bitValue == 1) {
+                           value = 0.5f;
+                       }
+                       else {
+                           value = 1.0f;
+                       }
+                   }
+                       break;
+                   default:
+                       bsIn.Read(value);
+                       break;
+               }
+
+               emit receivedNetCommandValue(command, value, deadReckoned, valueRate);
+               writeOutput(QString("Net Command (%1): ").arg(command)+QString::number((double)value)+(deadReckoned ? QString(", ") + QString::number((double)valueRate) : ""));
+
+               if (mImpl->isHost) {
+                   //pass along to all other clients except the sender
+                   RakNet::BitStream bsOut;
+                   bsOut.Write((RakNet::MessageID)ID_NET_COMMAND_VALUE);
+                   bsOut.Write(orderingChannel);
+                   //bsOut.WriteBits((const unsigned char *)&priorityChar, 2);
+                   //bsOut.WriteBits((const unsigned char *)&reliabilityChar, 3);
+                   //bsOut.WriteBits((const unsigned char *)&compressionTypeChar, 3);
+                   //packetInfo = priorityChar | (unsigned char)(reliabilityChar << 2) | (unsigned char)(compressionTypeChar << 5);
+                   bsOut.Write(packetInfo);
+                   bsOut.Write(command);
+                   switch (compressionType)
+                   {
+                       case BINARY:
+                           value > 0.0f ? bsOut.Write1() : bsOut.Write0();
+                           break;
+                       case FLOAT16:
+                           bsOut.WriteFloat16(value, -1.0f, 1.0f);
+                           if (deadReckoned) {
+                               bsOut.WriteFloat16(valueRate, -maxValueRate, maxValueRate);
+                           }
+                           break;
+                       case FLOAT32:
+                           bsOut.Write(value);
+                           if (deadReckoned) {
+                               bsOut.Write(valueRate);
+                           }
+                           break;
+                       //case FLOAT64:
+                       //	bsOut.Write(dValue);
+                       //	break;
+                       case NEG_ONE_ZERO_POS_ONE:
+                       {
+                           unsigned char bitValue = 0;
+                           if (value < 0.0f) {
+                               bitValue = 0;
+                           }
+                           else if (value == 0.0f) {
+                               bitValue = 1;
+                           }
+                           else {
+                               bitValue = 2;
+                           }
+                           bsOut.WriteBits((const unsigned char *)&bitValue, 2);
+                           break;
+                       }
+                       case ZERO_HALF_ONE:
+                       {
+                           unsigned char bitValue = 0;
+                           if (value == 0.0f) {
+                               bitValue = 0;
+                           }
+                           else if (value > 0.99999f) {
+                               bitValue = 2;
+                           }
+                           else {
+                               bitValue = 1;
+                           }
+                           bsOut.WriteBits((const unsigned char *)&bitValue, 2);
+                       }
+                           break;
+                       default:
+                           bsOut.Write(value);
+                           break;
+                   }
+
+                   mImpl->peer->Send(&bsOut, priority, reliability, orderingChannel, packet->systemAddress, true);
+               }
+           }
+           break;
+        }
+        case ID_NET_CORRECTION_COMMAND_VALUE:
         {
             if (mImpl->mySeat > 0 || mImpl->isHost)
             {
-                int command = -1;
-                float value = 0.f;
+                unsigned short command = 0;
+                float value = 0.0f;
+
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
+
                 bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
-                bsIn.ReadBitsFromIntegerRange(command,0,65535);
+                bsIn.Read(command);
                 bsIn.Read(value);
-                bool reliable = (packet->data[0] == ID_NET_COMMAND_VALUE);
-                emit receivedNetCommandValue(command, value, reliable);
-                writeOutput(QString("Net Command (%1): ").arg(command)+QString::number(value));
+
+                emit receivedNetCommandValue(command, value, false, 0.0f);
+                writeOutput(QString("Net Command (%1): ").arg(command)+QString::number((double)value));
 
                 if (mImpl->isHost) {
                     //pass along to all other clients except the sender
                     RakNet::BitStream bsOut;
-                    bsOut.Write((RakNet::MessageID)ID_NET_COMMAND_VALUE);
-                    bsOut.WriteBitsFromIntegerRange(command, 0, 65535);
+                    bsOut.Write((RakNet::MessageID)ID_NET_CORRECTION_COMMAND_VALUE);
+                    bsOut.Write(command);
                     bsOut.Write(value);
-                    if (reliable) {
-                        mImpl->peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, true);
-                    }
-                    else {
-                        mImpl->peer->Send(&bsOut, MEDIUM_PRIORITY, UNRELIABLE_SEQUENCED, 0, packet->systemAddress, true);
-                    }
+                    mImpl->peer->Send(&bsOut, LOW_PRIORITY, RELIABLE, 0, packet->systemAddress, true);
                 }
             }
-            break;
         }
         default:
             writeOutput(QString("Message with identifier %1 has arrived.").arg(packet->data[0]));
@@ -1045,7 +1233,8 @@ void Network::update()
 
     //periodically update each client with all the other client's info
     //make sure each client gets a ping update about every 10 seconds
-    if (mImpl->isHost) {
+    if (mImpl->isHost)
+    {
         size_t numberOfClientsReceiving = mImpl->clientMap.size() - 1;
         if (numberOfClientsReceiving > 0) {
             RakNet::Time pingUpdateIntervalMS = 10000 / numberOfClientsReceiving;
@@ -1073,6 +1262,30 @@ void Network::update()
         }
     }
 
+    int numClients = 0;
+    float myPacketLoss = 0;
+    uint64_t bandwidthSendRate = 0;
+    uint64_t bandwidthReceiveRate = 0;
+    uint64_t bandwidthSentTotal = 0;
+    uint64_t bandwidthReceivedTotal = 0;
+    uint64_t connectionTime = 0;
+
+    if (mImpl->currentStatus == IS_CONNECTED || mImpl->isHost) {
+        numClients = getNumClients();
+
+        bandwidthSendRate = getRecentBandwidth(ACTUAL_BYTES_SENT);
+        bandwidthReceiveRate = getRecentBandwidth(ACTUAL_BYTES_RECEIVED);
+        bandwidthSentTotal = getBandwidth(ACTUAL_BYTES_SENT);
+        bandwidthReceivedTotal = getBandwidth(ACTUAL_BYTES_RECEIVED);
+
+        connectionTime = getConnectionTime();
+        if (!mImpl->isHost) {
+            myPacketLoss = getMyRecentPacketLoss();
+        }
+
+        window->setStatistics(numClients, bandwidthSendRate, bandwidthReceiveRate, bandwidthSentTotal, bandwidthReceivedTotal, connectionTime, myPacketLoss);
+    }
+
     mImpl->statisticsUpdated = false;
 }
 
@@ -1088,47 +1301,132 @@ void Network::handleLocalConnected()
 
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-void Network::handleReceivedLocalCommand(int command)
+void Network::handleReceivedLocalCommand(unsigned short command, PacketPriority priority, PacketReliability reliability, char orderingChannel)
 {
     if (mImpl->mySeat > 0)
     {
         if (mImpl->currentStatus == IS_CONNECTED || mImpl->isHost) {
+            unsigned char priorityChar = static_cast<unsigned char>(priority);
+            unsigned char reliabilityChar = static_cast<unsigned char>(reliability);
+            unsigned char compressionTypeChar = BINARY;
+
             RakNet::BitStream bsOut;
             bsOut.Write((RakNet::MessageID)ID_NET_COMMAND);
-            bsOut.WriteBitsFromIntegerRange(command, 0, 65535);
-            RakNet::SystemAddress skipAddress = mImpl->isHost ? RakNet::UNASSIGNED_SYSTEM_ADDRESS : mImpl->peer->GetSystemAddressFromIndex(0);
+            bsOut.Write(orderingChannel);
+            //bsOut.WriteBits((const unsigned char *)&priorityChar, 2);
+            //bsOut.WriteBits((const unsigned char *)&reliabilityChar, 3);
+            //bsOut.WriteBits((const unsigned char *)&compressionTypeChar, 3);
+            unsigned char packetInfo = priorityChar | (unsigned char)(reliabilityChar << 2) | (unsigned char)(compressionTypeChar << 5);
+            bsOut.Write(packetInfo);
+            bsOut.Write(command);
 
-            //broadcast to everyone or send to host only
-            mImpl->peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, skipAddress, mImpl->isHost);
+            //if host, broadcast to everyone, else send to host only
+            RakNet::SystemAddress skipAddress = mImpl->isHost ? RakNet::UNASSIGNED_SYSTEM_ADDRESS : mImpl->peer->GetSystemAddressFromIndex(0);
+            mImpl->peer->Send(&bsOut, priority, reliability, orderingChannel, skipAddress, mImpl->isHost);
         }
     }
 }
 
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-void Network::handleReceivedLocalCommandValue(int command, float value, bool reliable)
+void Network::handleReceivedLocalCommandValue(unsigned short command, PacketPriority priority, PacketReliability reliability, char orderingChannel, NetCompressionTypes compressionType, float value, bool deadReckoned, float valueRate)
 {
     if (mImpl->mySeat > 0)
     {
         if (mImpl->currentStatus == IS_CONNECTED || mImpl->isHost) {
+            unsigned char priorityChar = static_cast<unsigned char>(priority);
+            unsigned char reliabilityChar = static_cast<unsigned char>(reliability);
+            unsigned char compressionTypeChar = static_cast<unsigned char>(compressionType);
+
             RakNet::BitStream bsOut;
-            if (reliable) {
-                bsOut.Write((RakNet::MessageID)ID_NET_COMMAND_VALUE);
+            bsOut.Write((RakNet::MessageID)ID_NET_COMMAND_VALUE);
+            bsOut.Write(orderingChannel);
+            //bsOut.WriteBits((const unsigned char *)&priorityChar, 2);
+            //bsOut.WriteBits((const unsigned char *)&reliabilityChar, 3);
+            //bsOut.WriteBits((const unsigned char *)&compressionTypeChar, 3);
+            unsigned char packetInfo = priorityChar | (unsigned char)(reliabilityChar << 2) | (unsigned char)(compressionTypeChar << 5);
+            bsOut.Write(packetInfo);
+            bsOut.Write(command);
+
+            switch (compressionType)
+            {
+                case BINARY:
+                    value > 0.0f ? bsOut.Write1() : bsOut.Write0();
+                    break;
+                case FLOAT16:
+                    bsOut.WriteFloat16(value, -1.0f, 1.0f);
+                    if (deadReckoned) {
+                        bsOut.WriteFloat16(valueRate, -maxValueRate, maxValueRate);
+                    }
+                    break;
+                case FLOAT32:
+                    bsOut.Write(value);
+                    if (deadReckoned) {
+                        bsOut.Write(valueRate);
+                    }
+                    break;
+                //case FLOAT64:
+                //	bsOut.Write(dValue);
+                //	break;
+                case NEG_ONE_ZERO_POS_ONE:
+                {
+                    unsigned char bitValue = 0;
+                    if (value < 0.0f) {
+                        bitValue = 0;
+                    }
+                    else if (value == 0.0f) {
+                        bitValue = 1;
+                    }
+                    else {
+                        bitValue = 2;
+                    }
+                    bsOut.WriteBits((const unsigned char *)&bitValue, 2);
+                    break;
+                }
+                case ZERO_HALF_ONE:
+                {
+                    unsigned char bitValue = 0;
+                    if (value == 0.0f) {
+                        bitValue = 0;
+                    }
+                    else if (value > 0.99999f) {
+                        bitValue = 2;
+                    }
+                    else {
+                        bitValue = 1;
+                    }
+                    bsOut.WriteBits((const unsigned char *)&bitValue, 2);
+                }
+                    break;
+                default:
+                    bsOut.Write(value);
+                    break;
             }
-            else {
-                bsOut.Write((RakNet::MessageID)ID_NET_UNRELIABLE_COMMAND_VALUE);
-            }
-            bsOut.WriteBitsFromIntegerRange(command, 0, 65535);
-            bsOut.Write(value);
+
+            //if host, broadcast to everyone, else send to host only
             RakNet::SystemAddress skipAddress = mImpl->isHost ? RakNet::UNASSIGNED_SYSTEM_ADDRESS : mImpl->peer->GetSystemAddressFromIndex(0);
-            if (reliable) {
-                //broadcast to everyone or send to host only
-                mImpl->peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, skipAddress, mImpl->isHost);
-            }
-            else {
-                //broadcast to everyone or send to host only
-                mImpl->peer->Send(&bsOut, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0, skipAddress, mImpl->isHost);
-            }
+            mImpl->peer->Send(&bsOut, priority, reliability, orderingChannel, skipAddress, mImpl->isHost);
+        }
+    }
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+void Network::handleReceivedLocalCorrectionCommandValue(unsigned short command, float value)
+{
+    if (mImpl->mySeat > 0)
+    {
+        if (mImpl->currentStatus == IS_CONNECTED || mImpl->isHost) {
+
+            RakNet::BitStream bsOut;
+            bsOut.Write((RakNet::MessageID)ID_NET_CORRECTION_COMMAND_VALUE);
+
+            bsOut.Write(command);
+            bsOut.Write(value);
+
+            //if host, broadcast to everyone, else send to host only
+            RakNet::SystemAddress skipAddress = mImpl->isHost ? RakNet::UNASSIGNED_SYSTEM_ADDRESS : mImpl->peer->GetSystemAddressFromIndex(0);
+            mImpl->peer->Send(&bsOut, LOW_PRIORITY, RELIABLE, 0, skipAddress, mImpl->isHost);
         }
     }
 }
@@ -1341,7 +1639,7 @@ std::string Network::getClientNameByGUID(RakNet::RakNetGUID guid) const
 
 Client* Network::getClientByGUID(RakNet::RakNetGUID guid) const
 {
-    auto& it = mImpl->clientMap.find(guid);
+    auto it = mImpl->clientMap.find(guid);
     if (it != mImpl->clientMap.end()) {
         return &it->second;
     }

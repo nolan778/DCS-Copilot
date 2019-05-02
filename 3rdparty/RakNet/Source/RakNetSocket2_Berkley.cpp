@@ -3,7 +3,7 @@
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant 
+ *  LICENSE file in the root directory of this source tree. An additional grant
  *  of patent rights can be found in the PATENTS file in the same directory.
  *
  */
@@ -84,7 +84,7 @@ void RNS2_Berkley::GetSystemAddressIPV4 ( RNS2Socket rns2Socket, SystemAddress *
 	sockaddr_in sa;
 	memset(&sa,0,sizeof(sockaddr_in));
 	socklen_t len = sizeof(sa);
-	//int r = 
+	//int r =
 		getsockname__(rns2Socket, (sockaddr*)&sa, &len);
 	systemAddressOut->SetPortNetworkOrder(sa.sin_port);
 	systemAddressOut->address.addr4.sin_addr.s_addr=sa.sin_addr.s_addr;
@@ -131,7 +131,7 @@ void RNS2_Berkley::GetSystemAddressIPV4And6 ( RNS2Socket rns2Socket, SystemAddre
 		memcpy(&systemAddressOut->address.addr4,(sockaddr_in *)&ss,sizeof(sockaddr_in));
 		systemAddressOut->debugPort=ntohs(systemAddressOut->address.addr4.sin_port);
 
-		uint32_t zero = 0;		
+		uint32_t zero = 0;
 		if (memcmp(&systemAddressOut->address.addr4.sin_addr.s_addr, &zero, sizeof(zero))==0)
 			systemAddressOut->SetToLoopback(4);
 		//	systemAddressOut->address.addr4.sin_port=ntohs(systemAddressOut->address.addr4.sin_port);
@@ -178,7 +178,7 @@ RNS2BindResult RNS2_Berkley::BindSharedIPV4( RNS2_BerkleyBindParameters *bindPar
 
 	// Fill in the rest of the address structure
 	boundAddress.address.addr4.sin_family = AF_INET;
-	
+
 
 
 
@@ -254,7 +254,7 @@ RNS2BindResult RNS2_Berkley::BindSharedIPV4( RNS2_BerkleyBindParameters *bindPar
 			RAKNET_DEBUG_PRINTF("Unknown bind__() error %i.\n", ret); break;
 		}
 #endif
-	
+
 		return BR_FAILED_TO_BIND_SOCKET;
 	}
 
@@ -264,7 +264,7 @@ RNS2BindResult RNS2_Berkley::BindSharedIPV4( RNS2_BerkleyBindParameters *bindPar
 
 }
 RNS2BindResult RNS2_Berkley::BindSharedIPV4And6( RNS2_BerkleyBindParameters *bindParameters, const char *file, unsigned int line ) {
-	
+
 	(void) file;
 	(void) line;
 	(void) bindParameters;
@@ -281,7 +281,7 @@ RNS2BindResult RNS2_Berkley::BindSharedIPV4And6( RNS2_BerkleyBindParameters *bin
 
 
 	// On Ubuntu, "" returns "No address associated with hostname" while 0 works.
-	if (bindParameters->hostAddress && 
+	if (bindParameters->hostAddress &&
 		(_stricmp(bindParameters->hostAddress,"UNASSIGNED_SYSTEM_ADDRESS")==0 || bindParameters->hostAddress[0]==0))
 	{
 		getaddrinfo(0, portStr, &hints, &servinfo);
@@ -323,7 +323,14 @@ RNS2BindResult RNS2_Berkley::BindSharedIPV4And6( RNS2_BerkleyBindParameters *bin
 		if (ret>=0)
 		{
 			// Is this valid?
-			memcpy(&boundAddress.address.addr6, aip->ai_addr, sizeof(boundAddress.address.addr6));
+			if (aip->ai_family == AF_INET)
+			{
+				memcpy(&boundAddress.address.addr4, aip->ai_addr, sizeof(sockaddr_in));
+			}
+			else
+			{
+				memcpy(&boundAddress.address.addr6, aip->ai_addr, sizeof(sockaddr_in6));
+			}
 
 			freeaddrinfo(servinfo); // free the linked-list
 
@@ -333,7 +340,7 @@ RNS2BindResult RNS2_Berkley::BindSharedIPV4And6( RNS2_BerkleyBindParameters *bin
 			SetIPHdrIncl(bindParameters->setIPHdrIncl);
 
 			GetSystemAddressIPV4And6( rns2Socket, &boundAddress );
-			
+
 			return BR_SUCCESS;
 		}
 		else
@@ -341,7 +348,7 @@ RNS2BindResult RNS2_Berkley::BindSharedIPV4And6( RNS2_BerkleyBindParameters *bin
 			closesocket__(rns2Socket);
 		}
 	}
-	
+
 	return BR_FAILED_TO_BIND_SOCKET;
 
 #else
@@ -398,7 +405,7 @@ void RNS2_Berkley::RecvFromBlockingIPV4And6(RNS2RecvStruct *recvFromStruct)
 			RAKNET_DEBUG_PRINTF( "Warning: recvfrom failed:Error code - %d\n%s", dwIOError, messageBuffer );
 			LocalFree( messageBuffer );
 		}
-	}	
+	}
 #endif
 
 
@@ -451,8 +458,8 @@ void RNS2_Berkley::RecvFromBlockingIPV4(RNS2RecvStruct *recvFromStruct)
 	sockaddr_in sa;
 	memset(&sa,0,sizeof(sockaddr_in));
 	const int flag=0;
-	
-	
+
+
 
 
 
@@ -530,7 +537,7 @@ void RNS2_Berkley::RecvFromBlockingIPV4(RNS2RecvStruct *recvFromStruct)
 
 
 	{
-		
+
 		recvFromStruct->systemAddress.SetPortNetworkOrder( sa.sin_port );
 		recvFromStruct->systemAddress.address.addr4.sin_addr.s_addr=sa.sin_addr.s_addr;
 	}

@@ -50,8 +50,8 @@ class ClickableImage;
 
 struct ServerStartAttempt
 {
-    QString clientName;
-    QString port;
+    QString clientName = "DefaultHostName";
+    QString port = "39640";
     QString password;
     QString timeoutTimeMS;
     int maxClients;

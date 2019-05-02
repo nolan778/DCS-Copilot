@@ -21,6 +21,9 @@ INCLUDES
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
 
 #include <iostream>
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
@@ -44,6 +47,222 @@ Network::Network* net = nullptr;
 
 QTimer* netLocalTimer = nullptr;
 QTimer* netTimer = nullptr;
+
+
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+std::string getTimeString(uint64_t timeMS, TimeStringFormats format)
+{
+    std::ostringstream o;
+
+    uint64_t iSec = timeMS / 1000;
+    uint64_t iMin = timeMS / 60000;
+    uint64_t iHr = timeMS / 3600000;
+
+    switch (format) {
+    case TimeStringFormats::S:
+    {
+        o << iSec;
+        break;
+    }
+    case TimeStringFormats::S_FLOAT1:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(1);
+        o << (double)iSec + (double)(timeMS - iSec * 1000) / 1000.0;
+        break;
+    }
+    case TimeStringFormats::S_FLOAT2:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (double)iSec + (double)(timeMS - iSec * 1000) / 1000.0;
+        break;
+    }
+    case TimeStringFormats::S_FLOAT3:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(3);
+        o << (double)iSec + (double)(timeMS - iSec * 1000) / 1000.0;
+        break;
+    }
+    case TimeStringFormats::MMSS:
+    {
+        o << iMin << ":" << std::setfill('0') << std::setw(2) << (iSec - iMin * 60);
+        break;
+    }
+    case TimeStringFormats::HHMMSS:
+    {
+        o << iHr << ":" << std::setfill('0') << std::setw(2) << (iMin - iHr * 60)
+            << ":" << std::setfill('0') << std::setw(2) << (iSec - iMin * 60);
+        break;
+    }
+    case TimeStringFormats::DHHMMSS:
+    {
+        uint64_t iDay = timeMS / 86400000;
+        if (iDay > 0)
+            o << iDay << "d ";
+
+        o << std::setfill('0') << std::setw(2) << (iHr - iDay * 24)
+            << ":" << std::setfill('0') << std::setw(2) << (iMin - iHr * 60)
+            << ":" << std::setfill('0') << std::setw(2) << (iSec - iMin * 60);
+        break;
+    }
+    case TimeStringFormats::YDHHMMSS:
+    {
+        uint64_t iDay = timeMS / 86400000;
+        uint64_t iYr = timeMS / 86400000 / 365;
+        if (iYr > 0) {
+            o << iYr << "y " << (iDay - iYr * 365) << "d ";
+        }
+        else {
+            if (iDay > 0)
+                o << iDay << "d ";
+        }
+
+        o << std::setfill('0') << std::setw(2) << (iHr - iDay * 24)
+            << ":" << std::setfill('0') << std::setw(2) << (iMin - iHr * 60)
+            << ":" << std::setfill('0') << std::setw(2) << (iSec - iMin * 60);
+        break;
+    }
+    default:
+
+        break;
+    }
+
+    return o.str();
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+std::string getBandwidthString(uint64_t bytes, BandwidthStringFormats format)
+{
+    std::ostringstream o;
+
+    switch (format) {
+    case BandwidthStringFormats::bps:
+    {
+        o << bytes * 8 << " bps";
+        break;
+    }
+    case BandwidthStringFormats::kbps:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 128.0) << " kbps";
+        break;
+    }
+    case BandwidthStringFormats::mbps:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 131072.0) << " mbps";
+        break;
+    }
+    case BandwidthStringFormats::gbps:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 134217728.0) << " gbps";
+        break;
+    }
+    case BandwidthStringFormats::Bps:
+    {
+        o << bytes << " bytes/s";
+        break;
+    }
+    case BandwidthStringFormats::KBps:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 1024.0) << " KB/s";
+        break;
+    }
+    case BandwidthStringFormats::MBps:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 1048576.0) << " MB/s";
+        break;
+    }
+    case BandwidthStringFormats::GBps:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 1073741824.0) << " GB/s";
+        break;
+    }
+    case BandwidthStringFormats::bytes:
+    {
+        o << bytes << " bytes";
+        break;
+    }
+    case BandwidthStringFormats::KB:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 1024.0) << " KB";
+        break;
+    }
+    case BandwidthStringFormats::MB:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 1048576.0) << " MB";
+        break;
+    }
+    case BandwidthStringFormats::GB:
+    {
+        o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+        o.precision(2);
+        o << (bytes / 1073741824.0) << " GB";
+        break;
+    }
+    case BandwidthStringFormats::rateAdaptive:
+    {
+        uint64_t bits = bytes * 8;
+        if (bits < 1024)
+            o << bits << " bps";
+        else {
+            o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+            o.precision(2);
+
+            if (bits < 1048576)
+                o << (bits / 1024.0) << " kbps";
+            else if (bits < 1073741824)
+                o << (bits / 1048576.0) << " mbps";
+            else
+                o << (bits / 1073741824.0) << " gbps";
+        }
+
+        break;
+    }
+    case BandwidthStringFormats::totalAdaptive:
+    {
+        if (bytes < 1024)
+            o << bytes << " bytes";
+        else {
+            o.setf(std::ios_base::fixed, std::ios_base::floatfield);
+            o.precision(2);
+
+            if (bytes < 1048576)
+                o << (bytes / 1024.0) << " KB";
+            else if (bytes < 1073741824)
+                o << (bytes / 1048576.0) << " MB";
+            else
+                o << (bytes / 1073741824.0) << " GB";
+        }
+
+        break;
+    }
+    default:
+
+        break;
+    }
+
+    return o.str();
+}
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -143,12 +362,18 @@ MainWindow::MainWindow(QWidget *parent) :
     net = new Network::Network(this);
 
     connect(netLocal, SIGNAL(localConnected(void)), net, SLOT(handleLocalConnected(void)));
-    connect(netLocal, SIGNAL(receivedLocalCommand(int)), net, SLOT(handleReceivedLocalCommand(int)));
-    connect(netLocal, SIGNAL(receivedLocalCommandValue(int,float,bool)), net, SLOT(handleReceivedLocalCommandValue(int,float,bool)));
+
+    connect(netLocal, SIGNAL(receivedLocalCommand(unsigned short,PacketPriority,PacketReliability,char)),
+            net, SLOT(handleReceivedLocalCommand(unsigned short,PacketPriority,PacketReliability,char)));
+    connect(netLocal, SIGNAL(receivedLocalCommandValue(unsigned short,PacketPriority,PacketReliability,char,NetCompressionTypes,float,float,float)),
+            net, SLOT(handleReceivedLocalCommandValue(unsigned short,PacketPriority,PacketReliability,char,NetCompressionTypes,float,float,float)));
 
     connect(net, SIGNAL(receivedSeatChange(int)), netLocal, SLOT(handleReceivedSeatChange(int)));
-    connect(net, SIGNAL(receivedNetCommand(int)), netLocal, SLOT(handleReceivedNetCommand(int)));
-    connect(net, SIGNAL(receivedNetCommandValue(int,float,bool)), netLocal, SLOT(handleReceivedNetCommandValue(int,float,bool)));
+
+    connect(net, SIGNAL(receivedNetCommand(unsigned short)),
+            netLocal, SLOT(handleReceivedNetCommand(unsigned short)));
+    connect(net, SIGNAL(receivedNetCommandValue(unsigned short,float,bool,float)),
+            netLocal, SLOT(handleReceivedNetCommandValue(unsigned short,float,bool,float)));
 
     updateListenerStatus(false);
     updateDCSStatus(false);
@@ -216,6 +441,12 @@ void MainWindow::setPing(const QString& id, int ping)
     }
 }
 
+
+void MainWindow::setMyPing(int ping)
+{
+    ui->label_13->setText(QString::number(ping));
+}
+
 void MainWindow::setMaxSeats(unsigned char seatNumber)
 {
     ui->spinBox->setMaximum(seatNumber);
@@ -232,6 +463,43 @@ void MainWindow::removeClient(const QString& id)
             break;
         }
     }
+}
+
+void MainWindow::setServerIP(const QString& ip)
+{
+    ui->label_21->setText(ip);
+}
+
+void MainWindow::setStatistics(int numClients, uint64_t bandwidthSendRate, uint64_t bandwidthReceiveRate, uint64_t bandwidthSentTotal, uint64_t bandwidthReceivedTotal, uint64_t connectionTime, float myPacketLoss)
+{
+    QString numClientsStr = QString::number(numClients);
+    QString bandwidthSendRateStr = QString(getBandwidthString(bandwidthSendRate, BandwidthStringFormats::rateAdaptive).c_str());
+    QString bandwidthReceiveRateStr = QString(getBandwidthString(bandwidthReceiveRate, BandwidthStringFormats::rateAdaptive).c_str());
+    QString bandwidthSentTotalStr = QString(getBandwidthString(bandwidthSentTotal, BandwidthStringFormats::totalAdaptive).c_str());
+    QString bandwidthReceivedTotalStr = QString(getBandwidthString(bandwidthReceivedTotal, BandwidthStringFormats::totalAdaptive).c_str());
+    QString connectionTimeStr = QString(getTimeString(connectionTime, TimeStringFormats::DHHMMSS).c_str());
+    QString myPacketLossStr = QString::number((double)myPacketLoss*100.0, 'f', 3) + " %";
+
+    ui->label_19->setText(numClientsStr);
+    ui->label_15->setText(myPacketLossStr);
+    ui->label_17->setText(bandwidthSendRateStr);
+    ui->label_20->setText(bandwidthReceiveRateStr);
+    ui->label_16->setText(bandwidthSentTotalStr);
+    ui->label_18->setText(bandwidthReceivedTotalStr);
+    ui->label_14->setText(connectionTimeStr);
+}
+
+void MainWindow::resetStatistics()
+{
+    ui->label_21->setText("N/A");
+    ui->label_19->setText("N/A");
+    ui->label_13->setText("N/A");
+    ui->label_15->setText("N/A");
+    ui->label_17->setText("N/A");
+    ui->label_20->setText("N/A");
+    ui->label_16->setText("N/A");
+    ui->label_18->setText("N/A");
+    ui->label_14->setText("N/A");
 }
 
 void MainWindow::clearClients()
@@ -328,7 +596,7 @@ void MainWindow::stopLocalServer()
 }
 
 void MainWindow::startServer()
-{;
+{
     ServerStartAttempt attempt = serverStart->getServerStartAttempt();
     net->setTimeoutTimeMS(attempt.timeoutTimeMS.toInt());
     net->setMaxClients(attempt.maxClients);
@@ -438,13 +706,21 @@ void MainWindow::on_pushButton_clicked()
 
 void MainWindow::on_pushButton_2_clicked()
 {
-    int command = ui->spinBox_2->value();
-    net->handleReceivedLocalCommand(command);
+    unsigned short command = (unsigned short)ui->spinBox_2->value();
+    net->handleReceivedLocalCommand(command,HIGH_PRIORITY,RELIABLE_ORDERED,0);
+
+    QString q = QString("Local Command (%1)").arg(command);
+    std::cout << q.toStdString().c_str() << std::endl;
+    logMessage(q);
 }
 
 void MainWindow::on_pushButton_3_clicked()
 {
-    int command = ui->spinBox_2->value();
-    float value = ui->doubleSpinBox->value();
-    net->handleReceivedLocalCommandValue(command, value, true);
+    unsigned short command = (unsigned short)ui->spinBox_2->value();
+    float value = (float)ui->doubleSpinBox->value();
+    net->handleReceivedLocalCommandValue(command,HIGH_PRIORITY,RELIABLE_ORDERED,0,Network::FLOAT32,value,true,0.432f);
+
+    QString q = QString("Local Command (%1): ").arg(command)+QString::number((double)value);
+    std::cout << q.toStdString().c_str() << std::endl;
+    logMessage(q);
 }

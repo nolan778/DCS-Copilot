@@ -42,7 +42,7 @@ enum CustomLocalNetworkMessages
     ID_LOCAL_SET_SEAT,
     ID_LOCAL_COMMAND,
     ID_LOCAL_COMMAND_VALUE,
-    ID_LOCAL_UNRELIABLE_COMMAND_VALUE,
+    ID_LOCAL_CORRECTION_COMMAND_VALUE,
 };
 
 namespace Network {
@@ -260,27 +260,66 @@ void NetworkLocal::update()
             break;
         }
         case ID_LOCAL_COMMAND:
+        case ID_LOCAL_COMMAND_VALUE:
         {
-            int command = -1;
+            unsigned short command = 0;
+            float value = 0.f;
+            float valueRate = 0.f;
+            bool deadReckoned = false;
+            char orderingChannel;
+            unsigned char priority;
+            unsigned char reliability;
+            unsigned char compType;
+            unsigned char packetInfo;
+            NetCompressionTypes compressionType = BINARY;
+
             RakNet::BitStream bsIn(packet->data, packet->length, false);
             bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
-            bsIn.ReadBitsFromIntegerRange(command, 0, 65535);
-            emit receivedLocalCommand(command);
-            writeOutput(QString("Local Command (%1)").arg(command));
+            bsIn.Read(orderingChannel);
+            //bsIn.ReadBits((unsigned char *)(&(priority)), 2);
+            //bsIn.ReadBits((unsigned char *)(&(reliability)), 3);
+            //bsIn.ReadBits((unsigned char *)(&(compType)), 3);
+            bsIn.Read(packetInfo);
+            bsIn.Read(command);
+            priority = READFROM(packetInfo,0,2);
+            reliability = READFROM(packetInfo,2,3);
+            compType = READFROM(packetInfo,5,3);
+            compressionType = static_cast<NetCompressionTypes>(compType);
+
+            if (packet->data[0] != ID_LOCAL_COMMAND)
+            {
+                //Analog command, read compression type and value
+                bsIn.Read(value);
+                if (bsIn.GetNumberOfUnreadBits() > 7) {
+                    deadReckoned = true;
+                    bsIn.Read(valueRate);
+                }
+            }
+
+            if (packet->data[0] == ID_LOCAL_COMMAND) {
+                //Digital command
+                emit receivedLocalCommand(command, static_cast<PacketPriority>(priority), static_cast<PacketReliability>(reliability), orderingChannel);
+                writeOutput(QString("Local Command (%1)").arg(command));
+            }
+            else {
+                //Analog command
+                emit receivedLocalCommandValue(command, static_cast<PacketPriority>(priority), static_cast<PacketReliability>(reliability), orderingChannel, compressionType, value, deadReckoned, valueRate);
+                writeOutput(QString("Local Command (%1): ").arg(command)+QString::number((double)value)+(deadReckoned ? QString(", ") + QString::number((double)valueRate) : ""));
+            }
             break;
         }
-        case ID_LOCAL_COMMAND_VALUE:
-        case ID_LOCAL_UNRELIABLE_COMMAND_VALUE:
+        case ID_LOCAL_CORRECTION_COMMAND_VALUE:
         {
-            int command = -1;
+            unsigned short command = 0;
             float value = 0.f;
+
             RakNet::BitStream bsIn(packet->data, packet->length, false);
             bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
-            bsIn.ReadBitsFromIntegerRange(command,0,65535);
+            bsIn.Read(command);
             bsIn.Read(value);
-            bool reliable = (packet->data[0] == ID_LOCAL_COMMAND_VALUE);
-            emit receivedLocalCommandValue(command, value, reliable);
-            writeOutput(QString("Local Command (%1):").arg(command)+=QString::number(value));
+
+            emit receivedLocalCorrectionCommandValue(command, value);
+            writeOutput(QString("Local Command (%1): ").arg(command)+QString::number((double)value)+" (Corrected)");
             break;
         }
         default:
@@ -333,38 +372,31 @@ void NetworkLocal::handleReceivedSeatChange(int seatNumber)
 
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-void NetworkLocal::handleReceivedNetCommand(int command)
+void NetworkLocal::handleReceivedNetCommand(unsigned short command)
 {
     if (isHost) {
         RakNet::BitStream bsOut;
         bsOut.Write((RakNet::MessageID)ID_LOCAL_COMMAND);
-        bsOut.WriteBitsFromIntegerRange(command, 0, 65535);
+        bsOut.Write(command);
         //send to dcs
-        peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+        peer->Send(&bsOut, IMMEDIATE_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
     }
 }
 
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-void NetworkLocal::handleReceivedNetCommandValue(int command, float value, bool reliable)
+void NetworkLocal::handleReceivedNetCommandValue(unsigned short command, float value, bool deadReckoned, float valueRate)
 {
     if (isHost) {
         RakNet::BitStream bsOut;
-        if (reliable) {
-            bsOut.Write((RakNet::MessageID)ID_LOCAL_COMMAND_VALUE);
-        }
-        else {
-            bsOut.Write((RakNet::MessageID)ID_LOCAL_UNRELIABLE_COMMAND_VALUE);
-        }
-        bsOut.WriteBitsFromIntegerRange(command, 0, 65535);
+        bsOut.Write((RakNet::MessageID)ID_LOCAL_COMMAND_VALUE);
+        bsOut.Write(command);
         bsOut.Write(value);
+        if (deadReckoned) {
+            bsOut.Write(valueRate);
+        }
         //send to dcs
-        if (reliable) {
-            peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
-        }
-        else {
-            peer->Send(&bsOut, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
-        }
+        peer->Send(&bsOut, IMMEDIATE_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
     }
 }
 

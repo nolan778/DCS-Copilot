@@ -52,9 +52,9 @@ class FavoriteTableIcon;
 
 struct ServerConnectionAttempt
 {
-    QString clientName;
-    QString ip;
-    QString port;
+    QString clientName = "DefaultClientName";
+    QString ip = "127.0.0.1";
+    QString port = "39640";
     QString password;
 };
 

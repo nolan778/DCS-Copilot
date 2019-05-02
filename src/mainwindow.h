@@ -30,7 +30,34 @@ INCLUDES
 DEFINITIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
 
+enum class TimeStringFormats {
+    S = 0,		//seconds only - always increasing
+    MMSS,		//mm::ss - minutes can go higher than 59
+    HHMMSS,		//HH:mm::ss - hours can go higher than 23
+    DHHMMSS,	//d HH:mm:ss - days increment at 24 hours and always increasing
+    YDHHMMSS,	//y d HH:mm::ss - years increment at 365 days
 
+    S_FLOAT1,	//seconds "X.Y"
+    S_FLOAT2,	//seconds "X.YY"
+    S_FLOAT3,	//seconds "X.YYY"
+};
+
+enum class BandwidthStringFormats {
+    bps = 0,	//bits/sec
+    kbps,		//kilobits/sec
+    mbps,		//megabits/sec
+    gbps,		//gigabits/sec
+    Bps,		//bytes/sec
+    KBps,		//Kilobytes/sec
+    MBps,		//Megabytes/sec
+    GBps,		//Gigabytes/sec
+    bytes,		//bytes
+    KB,			//Kilobytes
+    MB,			//Megabytes
+    GB,			//Gigabytes
+    rateAdaptive, //bps, kbps, mbps, or gbps depending on rate
+    totalAdaptive, //bytes, KB, MB, or GB depending on amount
+};
 
 /*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 FORWARD DECLARATIONS
@@ -71,8 +98,12 @@ public:
     void addClient(const QString& id, const QString& clientName, unsigned char seatNumber = 0);
     void removeClient(const QString& id);
     void setSeat(const QString& id, unsigned char seatNumber);
+    void setServerIP(const QString& ip);
     void setPing(const QString& id, int ping);
+    void setMyPing(int ping);
     void setMaxSeats(unsigned char seatNumber);
+    void setStatistics(int numClients, uint64_t bandwidthSendRate, uint64_t bandwidthReceiveRate, uint64_t bandwidthSentTotal, uint64_t bandwidthReceivedTotal, uint64_t connectionTime, float myPacketLoss);
+    void resetStatistics();
     void clearClients();
 
     QLabel* Listener_status_label = nullptr;
