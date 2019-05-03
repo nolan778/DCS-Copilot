@@ -317,28 +317,48 @@ void ConnectionWindow::useHistoryServer(int row)
 {
     QSettings settings;
     QStringList servers = settings.value("recentServerList").toStringList();
+    QString defaultServerPort = settings.value("serverPort", "39640").toString();
 
-    QString ipPort = servers.at(row);
-    QStringList ipPortStrList = ipPort.split(":");
-    ui->lineEdit_5->setText(ipPortStrList.at(0));
-    if (ipPortStrList.size() > 1) {
-        ui->lineEdit_2->setText(ipPortStrList.at(1));
+    if (servers.size() > 0)
+    {
+        QString ipPort = servers.at(row);
+        QStringList ipPortStrList = ipPort.split(":");
+        ui->lineEdit_5->setText(ipPortStrList.at(0));
+        if (ipPortStrList.size() > 1) {
+            ui->lineEdit_2->setText(ipPortStrList.at(1));
+        }
+        else {
+            ui->lineEdit_2->setText(defaultServerPort);
+        }
     }
-
+    else {
+        ui->lineEdit_5->setText("127.0.0.1");
+        ui->lineEdit_2->setText(defaultServerPort);
+    }
 }
 
 void ConnectionWindow::useFavoriteServer(int row)
 {
     QSettings settings;
     QStringList favorites = settings.value("favoriteServerList").toStringList();
+    QString defaultServerPort = settings.value("serverPort", "39640").toString();
 
-    QString ipPort = favorites.at(row);
-    QStringList ipPortStrList = ipPort.split(":");
-    ui->lineEdit_5->setText(ipPortStrList.at(0));
-    if (ipPortStrList.size() > 1) {
-        ui->lineEdit_2->setText(ipPortStrList.at(1));
+    if (favorites.size() > 0)
+    {
+        QString ipPort = favorites.at(row);
+        QStringList ipPortStrList = ipPort.split(":");
+        ui->lineEdit_5->setText(ipPortStrList.at(0));
+        if (ipPortStrList.size() > 1) {
+            ui->lineEdit_2->setText(ipPortStrList.at(1));
+        }
+        else {
+            ui->lineEdit_2->setText(defaultServerPort);
+        }
     }
-
+    else {
+        ui->lineEdit_5->setText("127.0.0.1");
+        ui->lineEdit_2->setText(defaultServerPort);
+    }
 }
 
 void ConnectionWindow::showEvent( QShowEvent* event )
@@ -347,12 +367,10 @@ void ConnectionWindow::showEvent( QShowEvent* event )
 
     QSettings settings;
     QString clientName = settings.value("clientName", "UnknownUser").toString();
-    QString serverPort = settings.value("serverPort", "39640").toString();
 
     ui->lineEdit_3->setText(clientName);
-    ui->lineEdit_2->setText(serverPort);
     ui->lineEdit_4->clear();
-    ui->lineEdit_5->setText("127.0.0.1");
+    useHistoryServer(0);
 
     ui->lineEdit_2->setEnabled(false);
     portLock->setPixmap(*lockOffPix);
