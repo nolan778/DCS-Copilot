@@ -361,19 +361,31 @@ MainWindow::MainWindow(QWidget *parent) :
     netLocal = new Network::NetworkLocal(this);
     net = new Network::Network(this);
 
+    //NET_LOCAL ===> NET
     connect(netLocal, SIGNAL(localConnected(void)), net, SLOT(handleLocalConnected(void)));
 
-    connect(netLocal, SIGNAL(receivedLocalCommand(unsigned short,PacketPriority,PacketReliability,char)),
-            net, SLOT(handleReceivedLocalCommand(unsigned short,PacketPriority,PacketReliability,char)));
-    connect(netLocal, SIGNAL(receivedLocalCommandValue(unsigned short,PacketPriority,PacketReliability,char,NetCompressionTypes,float,float,float)),
-            net, SLOT(handleReceivedLocalCommandValue(unsigned short,PacketPriority,PacketReliability,char,NetCompressionTypes,float,float,float)));
+    connect(netLocal, SIGNAL(receivedLocalCommand(unsigned short,unsigned char,unsigned char,char)),
+            net, SLOT(handleReceivedLocalCommand(unsigned short,unsigned char,unsigned char,char)));
+    connect(netLocal, SIGNAL(receivedLocalCommandValue(unsigned short,unsigned char,unsigned char,char,unsigned char,float,bool,float)),
+            net, SLOT(handleReceivedLocalCommandValue(unsigned short,unsigned char,unsigned char,char,unsigned char,float,bool,float)));
+    connect(netLocal, SIGNAL(receivedLocalCorrectionCommandValue(unsigned short,float)),
+            net, SLOT(handleReceivedLocalCorrectionCommandValue(unsigned short,float)));
 
+    connect(netLocal, SIGNAL(receivedLocalEvent(unsigned char)),
+            net, SLOT(handleReceivedLocalEvent(unsigned char)));
+
+
+
+    //NET ===> NET_LOCAL
     connect(net, SIGNAL(receivedSeatChange(int)), netLocal, SLOT(handleReceivedSeatChange(int)));
 
     connect(net, SIGNAL(receivedNetCommand(unsigned short)),
             netLocal, SLOT(handleReceivedNetCommand(unsigned short)));
     connect(net, SIGNAL(receivedNetCommandValue(unsigned short,float,bool,float)),
             netLocal, SLOT(handleReceivedNetCommandValue(unsigned short,float,bool,float)));
+
+    connect(net, SIGNAL(receivedNetEvent(unsigned char)),
+            netLocal, SLOT(handleReceivedNetEvent(unsigned char)));
 
     updateListenerStatus(false);
     updateDCSStatus(false);
@@ -718,7 +730,7 @@ void MainWindow::on_pushButton_3_clicked()
 {
     unsigned short command = (unsigned short)ui->spinBox_2->value();
     float value = (float)ui->doubleSpinBox->value();
-    net->handleReceivedLocalCommandValue(command,HIGH_PRIORITY,RELIABLE_ORDERED,0,Network::FLOAT32,value,true,0.432f);
+    net->handleReceivedLocalCommandValue(command,HIGH_PRIORITY,RELIABLE_ORDERED,0,Network::FLOAT32,value,false,0.0f);
 
     QString q = QString("Local Command (%1): ").arg(command)+QString::number((double)value);
     std::cout << q.toStdString().c_str() << std::endl;

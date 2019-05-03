@@ -88,10 +88,21 @@ namespace Network {
         FLOAT16,
         FLOAT32,
         FLOAT64,
-        NEG_ONE_ZERO_POS_ONE,
+        NEG_ONE_ZERO_ONE,
         ZERO_HALF_ONE,
+        NEG_ONE_ZERO_HALF_ONE,
+        NEG_TWO_NEG_ONE_ZERO_ONE,
 
         NUM_NET_COMPRESSION_TYPES,
+    };
+
+    enum NetworkOrderingChannels
+    {
+        ORDERING_CHANNEL_DEFAULT = 0,
+
+
+
+        ORDERING_CHANNEL_EVENTS = 30,
     };
 }
 

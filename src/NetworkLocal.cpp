@@ -43,6 +43,7 @@ enum CustomLocalNetworkMessages
     ID_LOCAL_COMMAND,
     ID_LOCAL_COMMAND_VALUE,
     ID_LOCAL_CORRECTION_COMMAND_VALUE,
+    ID_LOCAL_EVENT,
 };
 
 namespace Network {
@@ -269,9 +270,8 @@ void NetworkLocal::update()
             char orderingChannel;
             unsigned char priority;
             unsigned char reliability;
-            unsigned char compType;
+            unsigned char compressionType;
             unsigned char packetInfo;
-            NetCompressionTypes compressionType = BINARY;
 
             RakNet::BitStream bsIn(packet->data, packet->length, false);
             bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
@@ -283,8 +283,7 @@ void NetworkLocal::update()
             bsIn.Read(command);
             priority = READFROM(packetInfo,0,2);
             reliability = READFROM(packetInfo,2,3);
-            compType = READFROM(packetInfo,5,3);
-            compressionType = static_cast<NetCompressionTypes>(compType);
+            compressionType = READFROM(packetInfo,5,3);
 
             if (packet->data[0] != ID_LOCAL_COMMAND)
             {
@@ -298,12 +297,12 @@ void NetworkLocal::update()
 
             if (packet->data[0] == ID_LOCAL_COMMAND) {
                 //Digital command
-                emit receivedLocalCommand(command, static_cast<PacketPriority>(priority), static_cast<PacketReliability>(reliability), orderingChannel);
+                emit receivedLocalCommand(command, priority, reliability, orderingChannel);
                 writeOutput(QString("Local Command (%1)").arg(command));
             }
             else {
                 //Analog command
-                emit receivedLocalCommandValue(command, static_cast<PacketPriority>(priority), static_cast<PacketReliability>(reliability), orderingChannel, compressionType, value, deadReckoned, valueRate);
+                emit receivedLocalCommandValue(command, priority, reliability, orderingChannel, compressionType, value, deadReckoned, valueRate);
                 writeOutput(QString("Local Command (%1): ").arg(command)+QString::number((double)value)+(deadReckoned ? QString(", ") + QString::number((double)valueRate) : ""));
             }
             break;
@@ -320,6 +319,19 @@ void NetworkLocal::update()
 
             emit receivedLocalCorrectionCommandValue(command, value);
             writeOutput(QString("Local Command (%1): ").arg(command)+QString::number((double)value)+" (Corrected)");
+            break;
+        }
+        case ID_LOCAL_EVENT:
+        {
+            unsigned char eventID = 0;
+
+            RakNet::BitStream bsIn(packet->data, packet->length, false);
+            bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
+            bsIn.Read(eventID);
+
+            emit receivedLocalEvent(eventID);
+            writeOutput(QString("Local Event (%1)").arg((int)eventID));
+
             break;
         }
         default:
@@ -397,6 +409,19 @@ void NetworkLocal::handleReceivedNetCommandValue(unsigned short command, float v
         }
         //send to dcs
         peer->Send(&bsOut, IMMEDIATE_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+    }
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+void NetworkLocal::handleReceivedNetEvent(unsigned char eventID)
+{
+    if (isHost) {
+        RakNet::BitStream bsOut;
+        bsOut.Write((RakNet::MessageID)ID_LOCAL_EVENT);
+        bsOut.Write(eventID);
+        //send to dcs
+        peer->Send(&bsOut, IMMEDIATE_PRIORITY, RELIABLE_ORDERED, ORDERING_CHANNEL_EVENTS, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
     }
 }
 

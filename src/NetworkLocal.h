@@ -62,15 +62,17 @@ namespace Network {
 
     signals:
         void localConnected();
-        void receivedLocalCommand(unsigned short command, PacketPriority priority, PacketReliability reliability, char orderingChannel);
-        void receivedLocalCommandValue(unsigned short command, PacketPriority priority, PacketReliability reliability, char orderingChannel, NetCompressionTypes compressionType, float value, bool deadReckoned, float valueRate);
+        void receivedLocalCommand(unsigned short command, unsigned char priority, unsigned char reliability, char orderingChannel);
+        void receivedLocalCommandValue(unsigned short command, unsigned char priority, unsigned char reliability, char orderingChannel, unsigned char compressionType, float value, bool deadReckoned, float valueRate);
         void receivedLocalCorrectionCommandValue(unsigned short command, float value);
+        void receivedLocalEvent(unsigned char eventID);
 
 
     public slots:
         void handleReceivedSeatChange(int seatNumber);
         void handleReceivedNetCommand(unsigned short command);
         void handleReceivedNetCommandValue(unsigned short command, float value, bool deadReckoned, float valueRate);
+        void handleReceivedNetEvent(unsigned char eventID);
 
 	public:
         /// Constructor

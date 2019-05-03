@@ -101,12 +101,14 @@ signals:
     void receivedSeatChange(int seatNumber);
     void receivedNetCommand(unsigned short command);
     void receivedNetCommandValue(unsigned short command, float value, bool deadReckoned, float valueRate);
+    void receivedNetEvent(unsigned char eventID);
 
 public slots:
     void handleLocalConnected();
-    void handleReceivedLocalCommand(unsigned short command, PacketPriority priority, PacketReliability reliability, char orderingChannel);
-    void handleReceivedLocalCommandValue(unsigned short command, PacketPriority priority, PacketReliability reliability, char orderingChannel, NetCompressionTypes compressionType, float value, bool deadReckoned, float valueRate);
+    void handleReceivedLocalCommand(unsigned short command, unsigned char priority, unsigned char reliability, char orderingChannel);
+    void handleReceivedLocalCommandValue(unsigned short command, unsigned char priority, unsigned char reliability, char orderingChannel, unsigned char compressionType, float value, bool deadReckoned, float valueRate);
     void handleReceivedLocalCorrectionCommandValue(unsigned short command, float value);
+    void handleReceivedLocalEvent(unsigned char eventID);
 
 public:
     /// Constructor
