@@ -70,7 +70,7 @@ The server can be further configured in the Edit->Settings->Server tab:
 
 #### Client Connection
 A client can connect to a server via the File menu dropdown (File->Connect).  A new Connection window will open that will prompt the client for their
-Client Name, as well as the server information (IP Address, Port and Password).  Tthe port can be modified by clicking the Lock icon next to the 
+Client Name, as well as the server information (IP Address, Port and Password).  The port can be modified by clicking the Lock icon next to the 
 Port box and changing the value.
 
 The Connection window also has a History list of recent servers where a connection was attempted and a server Favorites list in the box to the 
@@ -113,8 +113,8 @@ Statistics of the current connection (Client or Host) are displayed on the left 
  * Connection Time - Your total time connected to the server for this connection session
  
 #### Digital/Analog Command Buttons
-This is a debug feature to test that data can be communicated between connected clients and the server host without requiring DCS World to be  
-running with a properly connected aircraft RakNet connection.
+This is a debug feature to test that data can be communicated between connected clients and the server host without requiring 
+DCS World to be running with a properly connected aircraft RakNet connection.
 
 #### Listener Status 
 The status of the Listener can be seen in the bottom information bar as either "RUNNING" or "NOT RUNNING".
@@ -139,15 +139,15 @@ DCS World built-in multicrew functionality is pretty crude, with only aircraft p
 synced between DCS clients in the same aircraft, originating from the pilot in command (PIC).  However, the EFM dll of every other 
 client is still running and simulating as if they were the PIC, with the force and moment calculations being ignored by the sim.
 Any systems logic in the EFM, as well as in the aircraft's lua systems is still being performed and can be valuable to make sure 
-the visual state of the aircraft and displays is correct for all connected clients.  However, without the reliable syncing of pilot 
+the visual state of the aircraft and displays are correct for all connected clients.  However, without the reliable syncing of pilot 
 actions (DCS commands and events), the state of the aircraft for each connected DCS client will quickly become unsynced from the PIC.
 
 ##### The Solution (Command Syncing)
 To resolve this sync issue, the goal of this project is to provide a method to sync these commands, events, and if desired, 
 cockpit and external animations.  Pilot actions originate from the aircraft of the pilot that performed the action, pass through
 the DCS Copilot application running on the same computer and then are either sent to all connected clients or to the DCS Copilot 
-server host, depending on whether the pilot that performed the action is the DCS Copilot server host or not.  Once the action received
-by another client, their aircraft will automatically perform the same action, as if they themselves peromed it, just with a small latency.
+server host, depending on whether the pilot that performed the action is the DCS Copilot server host or not.  Once the action is received
+by another client, their aircraft will automatically perform the same action, as if they themselves performed it, just with a small latency.
 It is therefore recommended to host the DCS Copilot server if you are the PIC of the aircraft in DCS World, to eliminate latency between 
 an action by a DCS client and the PIC.  If you are not the DCS Copilot host, your actions are first sent to the host and then are
 rebroadcast to all other clients in a valid seat.
@@ -165,7 +165,7 @@ potential reasons for this:
    others without sharing any sensitive binaries or lua code.
 
 If you choose to sync animations, you should only have one client seat number in charge of any one animation or else every client's
-individual animation state will conflict with the each others.
+individual animation state will conflict with each others.
 
 ##### Communication (DCS <-> DCS Copilot)
 Once a connection has been established between the DCS Copilot application and the DCS World aircraft's RakNet connection class, 
