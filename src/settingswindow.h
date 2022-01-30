@@ -1,6 +1,6 @@
 /*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Header:       serverstart.h
+Header:       settingswindow.h
 Author:       Cory Parks
 Date started: 10/2016
 
@@ -55,9 +55,11 @@ public:
     ~SettingsWindow();
 
     void showEvent( QShowEvent* event );
+    void setEnabledClientServerSettings(bool enabled);
 
 private slots:
     void on_SettingsWindow_accepted();
+    void on_tickRateIndexChanged(int index);
 
 private:
     Ui::SettingsWindow *ui;

@@ -42,8 +42,16 @@ enum CustomLocalNetworkMessages
     ID_LOCAL_SET_SEAT,
     ID_LOCAL_COMMAND,
     ID_LOCAL_COMMAND_VALUE,
-    ID_LOCAL_CORRECTION_COMMAND_VALUE,
+    ID_LOCAL_COMMAND_VALUE_CORRECTION,
+    ID_LOCAL_COMMAND_MASTER_SYNC_HASH,
+    ID_LOCAL_COMMAND_MASTER_SYNC_HASH_REQUEST,
+    ID_LOCAL_COMMAND_MASTER_SYNC,
+    ID_LOCAL_COMMAND_MASTER_SYNC_REQUEST,
     ID_LOCAL_EVENT,
+    ID_LOCAL_EXTERNAL_ANIMATION,
+    ID_LOCAL_EXTERNAL_ANIMATION_CORRECTION,
+    ID_LOCAL_COCKPIT_ANIMATION,
+    ID_LOCAL_COCKPIT_ANIMATION_CORRECTION,
 };
 
 namespace Network {
@@ -100,9 +108,10 @@ bool NetworkLocal::startServer()
     {
         unsigned short port = 37820;
         unsigned short max_clients = 1;
+        RakNet::TimeMS tickTimeMS = 6; // Match DCS Update Time in ms
 
         RakNet::SocketDescriptor sd(port, 0);
-        RakNet::StartupResult result = peer->Startup(max_clients, 10, &sd, 1);
+        RakNet::StartupResult result = peer->Startup(max_clients, tickTimeMS, &sd, 1);
 
         if (result == RakNet::RAKNET_STARTED)
         {
@@ -307,7 +316,7 @@ void NetworkLocal::update()
             }
             break;
         }
-        case ID_LOCAL_CORRECTION_COMMAND_VALUE:
+        case ID_LOCAL_COMMAND_VALUE_CORRECTION:
         {
             unsigned short command = 0;
             float value = 0.f;
@@ -371,11 +380,12 @@ const char* readBitStreamCharArray(RakNet::Packet *packet)
 
 void NetworkLocal::handleReceivedSeatChange(int seatNumber)
 {
-    if (isHost && seatNumber > 0) {
+    if (isHost && seatNumber > 0)
+    {
         RakNet::BitStream bsOut;
         bsOut.Write((RakNet::MessageID)ID_LOCAL_SET_SEAT);
         int zeroBasedSeatNumber = seatNumber - 1;
-        int maxValue = 64 - 1;
+        int maxValue = 60 - 1;
         bsOut.WriteBitsFromIntegerRange(zeroBasedSeatNumber, 0, maxValue);
         //send to dcs
         peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
@@ -386,7 +396,8 @@ void NetworkLocal::handleReceivedSeatChange(int seatNumber)
 
 void NetworkLocal::handleReceivedNetCommand(unsigned short command)
 {
-    if (isHost) {
+    if (isHost)
+    {
         RakNet::BitStream bsOut;
         bsOut.Write((RakNet::MessageID)ID_LOCAL_COMMAND);
         bsOut.Write(command);

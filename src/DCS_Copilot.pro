@@ -25,6 +25,7 @@ QMAKE_EXTRA_TARGETS += versiontarget
 DESTDIR = $$PWD/../bin
 
 SOURCES += main.cpp\
+    banlistwindow.cpp \
         mainwindow.cpp \
     NetworkLocal.cpp \
     settingswindow.cpp \
@@ -37,6 +38,7 @@ SOURCES += main.cpp\
 HEADERS  += mainwindow.h \
     NetworkLocal.h \
     NetworkTypes.h \
+    banlistwindow.h \
     settingswindow.h \
     serverstart.h \
     connectionwindow.h \
@@ -50,6 +52,7 @@ INCLUDEPATH += $$PWD/.
 DEPENDPATH += $$PWD/.
 
 FORMS    += mainwindow.ui \
+    banlistwindow.ui \
     settingswindow.ui \
     serverstart.ui \
     connectionwindow.ui \

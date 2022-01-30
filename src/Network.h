@@ -35,7 +35,7 @@ DEFINITIONS
 
 namespace Network {
     static const int MIN_CLIENTS = 1;
-    static const int MAX_CLIENTS = 64;
+    static const int MAX_CLIENTS = 60;
     static const int MIN_PORT = 1024;
     static const int MAX_PORT = 65535;
     static const int MIN_TICK_TIME_MS = 5;
@@ -136,6 +136,21 @@ public:
     ///Request the server to change seats
     void requestSeat(int seatNumber);
 
+    ///Kick Client from their current seat (given their GUID string)
+    void kickClientFromSeat(const std::string& guidStr);
+
+    ///Kick Client from the server (given their GUID string)
+    void kickClientFromServer(const std::string& guidStr);
+
+    ///Ban the Client from the server (given their GUID string)
+    bool banClientFromServer(const std::string& guidStr);
+
+    ///Clear the Ban List of all IPs
+    void clearBanList();
+
+    ///Ban the IP from the server
+    void banIpFromServer(const std::string& ipStr);
+
     ///Ping a remote unconnected system.
     bool ping(const char *ip, unsigned short port);
 
@@ -189,6 +204,9 @@ public:
 
     ///Returns the client data structure for the client found with the given GUID
     Client* getClientByGUID(RakNet::RakNetGUID guid) const;
+
+    ///Returns the client's IP Address from the given GUID String (Host only function, else returns an empty string)
+    std::string getClientAddress(const std::string& guidStr) const;
 
     ///Returns my client ID
     RakNet::RakNetGUID getMyGUID() const;

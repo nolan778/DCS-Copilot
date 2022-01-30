@@ -51,7 +51,7 @@
     </rect>
    </property>
    <property name="currentIndex">
-    <number>2</number>
+    <number>0</number>
    </property>
    <widget class="QWidget" name="tab_3">
     <attribute name="title">
@@ -194,6 +194,9 @@
     </widget>
    </widget>
    <widget class="QWidget" name="tab_2">
+    <property name="enabled">
+     <bool>true</bool>
+    </property>
     <attribute name="title">
      <string>Server</string>
     </attribute>
@@ -300,8 +303,8 @@
       <rect>
        <x>130</x>
        <y>70</y>
-       <width>42</width>
-       <height>22</height>
+       <width>51</width>
+       <height>21</height>
       </rect>
      </property>
      <property name="alignment">
@@ -310,11 +313,91 @@
      <property name="minimum">
       <number>1</number>
      </property>
-     <property name="maximum">
-      <number>64</number>
-     </property>
      <property name="value">
       <number>8</number>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_7">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>100</y>
+       <width>111</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>8</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Tick Rate (Hz)</string>
+     </property>
+    </widget>
+    <widget class="QComboBox" name="comboBox">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>100</y>
+       <width>51</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="editable">
+      <bool>false</bool>
+     </property>
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <property name="maxVisibleItems">
+      <number>5</number>
+     </property>
+     <property name="maxCount">
+      <number>5</number>
+     </property>
+     <item>
+      <property name="text">
+       <string>167</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>83</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>56</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>42</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>33</string>
+      </property>
+     </item>
+    </widget>
+    <widget class="QLabel" name="label_8">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>100</y>
+       <width>61</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>8</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>(x ms)</string>
      </property>
     </widget>
    </widget>

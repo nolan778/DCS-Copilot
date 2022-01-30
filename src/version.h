@@ -5,12 +5,12 @@ namespace Version
 {
 	static const int MAJOR = 0;
 	static const int MINOR = 1;
-	static const int REVISION = 0;
-	static const int BUILD = 21948;
+	static const int REVISION = 10;
+	static const int BUILD = 10029;
 
-	static const int YEAR = 2019;
-	static const int MONTH = 5;
-	static const int DAY = 3;
+	static const int YEAR = 2022;
+	static const int MONTH = 1;
+	static const int DAY = 29;
 }
 
 #endif // VERSION_H

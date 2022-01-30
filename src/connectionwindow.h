@@ -79,9 +79,19 @@ private slots:
     void useHistoryServer(int row);
     void useFavoriteServer(int row);
 
+    void on_tableWidget_cellClicked(int row, int col);
+    void on_tableWidget_2_cellClicked(int row, int col);
+    void on_tableWidget_cellChanged(int row, int col);
+    void on_tableWidget_2_cellChanged(int row, int col);
+
+    void removeServerFromHistory();
+    void clearHistory();
+    void on_tableWidget_customContextMenuRequested(const QPoint &pos);
+
 private:
     Ui::ConnectionWindow *ui;
     ServerConnectionAttempt serverConnectionAttempt;
+
 
     QPixmap *lockOnPix = nullptr;
     QPixmap *lockOffPix = nullptr;
@@ -90,6 +100,7 @@ private:
     QVector<FavoriteTableIcon*> favoriteStars;
     QVector<FavoriteTableIcon*> favoriteStars_Favorites;
     ClickableImage *portLock = nullptr;
+    int contextMenuRowAction;
 };
 
 #endif // CONNECTIONWINDOW_H

@@ -49,8 +49,9 @@
      </rect>
     </property>
     <property name="columnCount">
-     <number>4</number>
+     <number>5</number>
     </property>
+    <column/>
     <column/>
     <column/>
     <column/>
@@ -420,7 +421,7 @@
      <x>0</x>
      <y>0</y>
      <width>671</width>
-     <height>21</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -441,6 +442,7 @@
     <property name="title">
      <string>Edit</string>
     </property>
+    <addaction name="actionBan_List"/>
     <addaction name="actionSettings"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
@@ -492,6 +494,11 @@
   <action name="actionAbout">
    <property name="text">
     <string>About</string>
+   </property>
+  </action>
+  <action name="actionBan_List">
+   <property name="text">
+    <string>Ban List</string>
    </property>
   </action>
  </widget>

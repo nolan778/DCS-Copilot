@@ -31,6 +31,7 @@ INCLUDES
 #include "NetworkLocal.h"
 #include "Network.h"
 #include "NetworkTypes.h"
+#include "version.h"
 
 #include <QCloseEvent>
 #include <QTimer>
@@ -266,7 +267,11 @@ std::string getBandwidthString(uint64_t bytes, BandwidthStringFormats format)
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::MainWindow)
+    ui(new Ui::MainWindow),
+    clientConnectionIndex(0),
+    contextMenuRowAction(-1),
+    prevClientSortIndex(4),
+    prevClientSortOrder(Qt::AscendingOrder)
 {
     ui->setupUi(this);
 
@@ -274,11 +279,13 @@ MainWindow::MainWindow(QWidget *parent) :
     netTimer = new QTimer(this);
 
     netLocalTimer->setInterval(1);
-    netTimer->setInterval(10);
+    netTimer->setInterval(1);
 
     connect(netLocalTimer, SIGNAL(timeout()), this, SLOT(updateLocalNetwork()));
     connect(netTimer, SIGNAL(timeout()), this, SLOT(updateNetwork()));
 
+    QString version = QStringLiteral("%1.%2.%3.%4").arg(Version::MAJOR).arg(Version::MINOR).arg(Version::REVISION).arg(Version::BUILD);
+    this->setWindowTitle("DCS Copilot - " + version);
 
     //setup widgets
     QLabel* Listener_label = new QLabel("Listener:");
@@ -330,18 +337,27 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->tableWidget->setColumnWidth(0,170);
     ui->tableWidget->setColumnWidth(1,82);
     ui->tableWidget->setColumnWidth(2,82);
-    ui->tableWidget->setColumnHidden(3, true);
+    ui->tableWidget->setColumnHidden(3, true); // Id
+    ui->tableWidget->setColumnHidden(4, true); // Client Connection Index
     ui->tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
     ui->tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     ui->tableWidget->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     ui->tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui->tableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    ui->tableWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    ui->tableWidget->setContextMenuPolicy(Qt::CustomContextMenu);
 
     QPalette p = ui->textEdit->palette();
     p.setColor(QPalette::Base, QColor(240, 240, 240));
     ui->textEdit->setPalette(p);
     //ui->textEdit->setTextColor(QColor(120,120,120));
     //ui->textEdit->setEnabled(false);
+
+    ui->tableWidget->setSortingEnabled(true);
+    connect(ui->tableWidget->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, &MainWindow::HandleIndicatorChanged);   
+
+    //Ban List window
+    banListWindow = new BanListWindow();
 
     //Settings window
     settingsWindow = new SettingsWindow();
@@ -393,10 +409,24 @@ MainWindow::MainWindow(QWidget *parent) :
 
     QSettings settings;
     bool startListenerOnStartup = settings.value("startListenerOnStartup", true).toBool();
-    if (startListenerOnStartup)
+    if (startListenerOnStartup) {
         startLocalServer();
-    //addClient("ClientTest1");
-    //addClient("ClientTest2");
+    }
+}
+
+void MainWindow::HandleIndicatorChanged(int logicalIndex, Qt::SortOrder eSort)
+{
+    if ((prevClientSortIndex == logicalIndex) && (eSort == Qt::AscendingOrder) && (prevClientSortOrder == Qt::DescendingOrder))
+    {
+        ui->tableWidget->horizontalHeader()->setSortIndicator(4, Qt::AscendingOrder);
+        prevClientSortIndex = 4;
+        prevClientSortOrder = Qt::AscendingOrder;
+    }
+    else
+    {
+        prevClientSortIndex = logicalIndex;
+        prevClientSortOrder = eSort;
+    }
 }
 
 MainWindow::~MainWindow()
@@ -414,16 +444,21 @@ void MainWindow::addClient(const QString& id, const QString& clientName, unsigne
     QTableWidgetItem *twi2 = new QTableWidgetItem;
     QTableWidgetItem *twi3 = new QTableWidgetItem;
     QTableWidgetItem *twi4 = new QTableWidgetItem;
+    QTableWidgetItem *twi5 = new QTableWidgetItem;
 
     twi->setText(clientName);
     twi2->setText(QString::number(seatNumber));
     twi3->setText("0");
     twi4->setText(id);
+    twi5->setText(QString::number(clientConnectionIndex));
 
     ui->tableWidget->setItem(row, 0, twi);
     ui->tableWidget->setItem(row, 1, twi2);
     ui->tableWidget->setItem(row, 2, twi3);
     ui->tableWidget->setItem(row, 3, twi4);
+    ui->tableWidget->setItem(row, 4, twi5);
+
+    clientConnectionIndex++;
 }
 
 void MainWindow::setSeat(const QString& id, unsigned char seatNumber)
@@ -482,7 +517,13 @@ void MainWindow::setServerIP(const QString& ip)
     ui->label_21->setText(ip);
 }
 
-void MainWindow::setStatistics(int numClients, uint64_t bandwidthSendRate, uint64_t bandwidthReceiveRate, uint64_t bandwidthSentTotal, uint64_t bandwidthReceivedTotal, uint64_t connectionTime, float myPacketLoss)
+void MainWindow::setStatistics(int numClients,
+                               uint64_t bandwidthSendRate,
+                               uint64_t bandwidthReceiveRate,
+                               uint64_t bandwidthSentTotal,
+                               uint64_t bandwidthReceivedTotal,
+                               uint64_t connectionTime,
+                               float myPacketLoss)
 {
     QString numClientsStr = QString::number(numClients);
     QString bandwidthSendRateStr = QString(getBandwidthString(bandwidthSendRate, BandwidthStringFormats::rateAdaptive).c_str());
@@ -534,12 +575,14 @@ void MainWindow::logMessage(const QString& logMsg)
 
 void MainWindow::updateListenerStatus(bool running)
 {
-    if (running) {
+    if (running)
+    {
         Listener_status_label->setText("RUNNING");
         changeLabelColor(Listener_status_label, "green");
         findChild<QAction*>("actionStart_Listener")->setEnabled(false);
         findChild<QAction*>("actionStop_Listener")->setEnabled(true);
-    } else {
+    } else
+    {
         Listener_status_label->setText("NOT RUNNING");
         changeLabelColor(Listener_status_label, "darkred");
         findChild<QAction*>("actionStart_Listener")->setEnabled(true);
@@ -549,10 +592,12 @@ void MainWindow::updateListenerStatus(bool running)
 
 void MainWindow::updateDCSStatus(bool running)
 {
-    if (running) {
+    if (running)
+    {
         DCS_status_label->setText("RUNNING");
         changeLabelColor(DCS_status_label, "green");
-    } else {
+    } else
+    {
         DCS_status_label->setText("NOT RUNNING");
         changeLabelColor(DCS_status_label, "darkred");
     }
@@ -567,6 +612,7 @@ void MainWindow::updateServerStatus(int status)
         findChild<QAction*>("actionStart_Server")->setEnabled(false);
         findChild<QAction*>("actionConnect")->setEnabled(false);
         findChild<QAction*>("actionDisconnect")->setEnabled(false);
+        settingsWindow->setEnabledClientServerSettings(false);
     }
     else if (status == Network::SS_NOT_CONNECTED)
     {
@@ -576,6 +622,7 @@ void MainWindow::updateServerStatus(int status)
         findChild<QAction*>("actionStart_Server")->setEnabled(true);
         findChild<QAction*>("actionConnect")->setEnabled(true);
         findChild<QAction*>("actionDisconnect")->setEnabled(false);
+        settingsWindow->setEnabledClientServerSettings(true);
     }
     else if (status == Network::SS_CONNECTED)
     {
@@ -584,6 +631,7 @@ void MainWindow::updateServerStatus(int status)
         findChild<QAction*>("actionStart_Server")->setEnabled(false);
         findChild<QAction*>("actionConnect")->setEnabled(false);
         findChild<QAction*>("actionDisconnect")->setEnabled(true);
+        settingsWindow->setEnabledClientServerSettings(false);
     }
     else if (status == Network::SS_HOSTING)
     {
@@ -592,6 +640,19 @@ void MainWindow::updateServerStatus(int status)
         findChild<QAction*>("actionStart_Server")->setEnabled(false);
         findChild<QAction*>("actionConnect")->setEnabled(false);
         findChild<QAction*>("actionDisconnect")->setEnabled(true);
+        settingsWindow->setEnabledClientServerSettings(false);
+
+        if (net->isHost())
+        {
+            // Read ban list from settings
+            QSettings settings;
+            QStringList banList = settings.value("banList").toStringList();
+            net->clearBanList();
+            for (int i = 0; i < banList.size(); i++)
+            {
+                net->banIpFromServer(banList.at(i).toStdString());
+            }
+        }
     }
 }
 
@@ -616,13 +677,12 @@ void MainWindow::startServer()
     netTimer->start();
 }
 
-void MainWindow::connectToServer(/*const QString& clientName, const QString& ip, const QString& port, const QString& password*/)
+void MainWindow::connectToServer()
 {
     ServerConnectionAttempt attempt = connectionWindow->getServerConnectionAttempt();    
     net->connect(attempt.ip.toStdString().c_str(), attempt.port.toUShort(), attempt.clientName.toStdString(), attempt.password.toStdString());
     connectionWindow->setRecentServer(attempt.ip+":"+attempt.port);
     netTimer->start();
-
 }
 
 void MainWindow::stopServer()
@@ -669,10 +729,21 @@ void MainWindow::on_actionStop_Listener_triggered()
     stopLocalServer();
 }
 
+void MainWindow::on_actionBan_List_triggered()
+{
+    if (banListWindow->isHidden()) {
+        banListWindow->show();
+    }
+    else {
+        banListWindow->activateWindow();
+    }
+}
+
 void MainWindow::on_actionSettings_triggered()
 {
-    if (settingsWindow->isHidden())
+    if (settingsWindow->isHidden()) {
         settingsWindow->show();
+    }
     else {
         settingsWindow->activateWindow();
     }
@@ -680,8 +751,9 @@ void MainWindow::on_actionSettings_triggered()
 
 void MainWindow::on_actionStart_Server_triggered()
 {
-    if (serverStart->isHidden())
+    if (serverStart->isHidden()) {
         serverStart->show();
+    }
     else {
         serverStart->activateWindow();
     }
@@ -689,8 +761,9 @@ void MainWindow::on_actionStart_Server_triggered()
 
 void MainWindow::on_actionConnect_triggered()
 {
-    if (connectionWindow->isHidden())
+    if (connectionWindow->isHidden()) {
         connectionWindow->show();
+    }
     else {
         connectionWindow->activateWindow();
     }
@@ -703,8 +776,9 @@ void MainWindow::on_actionDisconnect_triggered()
 
 void MainWindow::on_actionAbout_triggered()
 {
-    if (aboutWindow->isHidden())
+    if (aboutWindow->isHidden()) {
         aboutWindow->show();
+    }
     else {
         aboutWindow->activateWindow();
     }
@@ -736,3 +810,78 @@ void MainWindow::on_pushButton_3_clicked()
     std::cout << q.toStdString().c_str() << std::endl;
     logMessage(q);
 }
+
+void MainWindow::kickClientFromSeat()
+{
+    if (contextMenuRowAction >= 0 && contextMenuRowAction < ui->tableWidget->rowCount())
+    {
+        QString id = ui->tableWidget->item(contextMenuRowAction, 3)->text();
+        net->kickClientFromSeat(id.toStdString());
+    }
+    contextMenuRowAction = -1;
+}
+
+void MainWindow::kickClientFromServer()
+{
+    if (contextMenuRowAction >= 0 && contextMenuRowAction < ui->tableWidget->rowCount())
+    {
+        QString id = ui->tableWidget->item(contextMenuRowAction, 3)->text();
+        net->kickClientFromServer(id.toStdString());
+    }
+    contextMenuRowAction = -1;
+}
+
+void MainWindow::banClientFromServer()
+{
+    if (contextMenuRowAction >= 0 && contextMenuRowAction < ui->tableWidget->rowCount())
+    {
+        QString id = ui->tableWidget->item(contextMenuRowAction, 3)->text();
+        if (net->banClientFromServer(id.toStdString()))
+        {
+            QString clientAddress = QString::fromStdString(net->getClientAddress(id.toStdString()));
+            QSettings settings;
+            QStringList banList = settings.value("banList").toStringList();
+            bool foundInBanList = false;
+            for (int i = 0; i < banList.size(); i++)
+            {
+                if (QString::compare(banList.at(i), clientAddress) == 0)
+                {
+                    foundInBanList = true;
+                    break;
+                }
+            }
+            if (!foundInBanList)
+            {
+                banList.append(clientAddress);
+                settings.setValue("banList", banList);
+            }
+        }
+    }
+    contextMenuRowAction = -1;
+}
+
+void MainWindow::on_tableWidget_customContextMenuRequested(const QPoint &pos)
+{
+    int row = ui->tableWidget->indexAt(pos).row();
+    contextMenuRowAction = row;
+    if (row >= 0 && net->isHost())
+    {
+        QMenu contextMenu;
+
+        QAction action1("Kick Out of Seat", this);
+        connect(&action1, SIGNAL(triggered()), this, SLOT(kickClientFromSeat()));
+        contextMenu.addAction(&action1);
+        contextMenu.addSeparator();
+
+        QAction action2("Kick from Server", this);
+        connect(&action2, SIGNAL(triggered()), this, SLOT(kickClientFromServer()));
+        contextMenu.addAction(&action2);
+
+        QAction action3("BAN from Server", this);
+        connect(&action3, SIGNAL(triggered()), this, SLOT(banClientFromServer()));
+        contextMenu.addAction(&action3);
+
+        contextMenu.exec(QCursor::pos());
+    }
+}
+

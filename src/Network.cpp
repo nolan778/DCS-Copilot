@@ -53,8 +53,16 @@ enum CustomNetworkMessages
     ID_NET_CLIENT_SEAT_BROADCAST,
     ID_NET_COMMAND,
     ID_NET_COMMAND_VALUE,
-    ID_NET_CORRECTION_COMMAND_VALUE,
+    ID_NET_COMMAND_VALUE_CORRECTION,
+    ID_NET_COMMAND_MASTER_SYNC_HASH,
+    ID_NET_COMMAND_MASTER_SYNC_HASH_REQUEST,
+    ID_NET_COMMAND_MASTER_SYNC,
+    ID_NET_COMMAND_MASTER_SYNC_REQUEST,
     ID_NET_EVENT,
+    ID_NET_EXTERNAL_ANIMATION,
+    ID_NET_EXTERNAL_ANIMATION_CORRECTION,
+    ID_NET_COCKPIT_ANIMATION,
+    ID_NET_COCKPIT_ANIMATION_CORRECTION,
 };
 
 namespace Network {
@@ -240,17 +248,15 @@ bool Network::startServer(unsigned short port, std::string clientName, std::stri
     int maxClients = mImpl->serverConfig.max_clients;
     RakNet::StartupResult result = mImpl->peer->Startup(maxClients, mImpl->serverConfig.tick_time_ms, &sd, 1);
 
-    if (result == RakNet::RAKNET_STARTED) {
+    if (result == RakNet::RAKNET_STARTED)
+    {
+        mImpl->isHost = true;
+        mImpl->serverGUID = mImpl->myGUID;
 
         writeOutput(QString("Server started successfully on port: %1").arg(mImpl->serverConfig.port));
         //QLabel* label =  window->findChild<QLabel*>("Listener_status_label");
         updateServerStatus(SS_HOSTING);
 
-
-
-
-        mImpl->isHost = true;
-        mImpl->serverGUID = mImpl->myGUID;
         mImpl->peer->SetMaximumIncomingConnections(mImpl->serverConfig.max_clients);
         //mImpl->peer->SetPerConnectionOutgoingBandwidthLimit(mImpl->max_outgoing_speed_per_connection);
         const char* pwd = 0;
@@ -276,11 +282,12 @@ bool Network::startServer(unsigned short port, std::string clientName, std::stri
         window->addClient(client.ID.ToString(), clientListName.c_str());
 
         window->setServerIP(getServerAddress().c_str());
-        window->setMaxSeats(getMaxClients());
+        window->setMaxSeats(getMaxClients()+1);
 
         return true;
     }
-    else {
+    else
+    {
 
         switch (result)
         {
@@ -330,7 +337,8 @@ bool Network::startServer(unsigned short port, std::string clientName, std::stri
 
 bool Network::connect(const char *ip, unsigned short port, std::string clientName, std::string password)
 {
-    if (!mImpl->isAttemptingConnection) {
+    if (!mImpl->isAttemptingConnection)
+    {
         //cancel any ongoing connections
         mImpl->peer->Shutdown(100);
         mImpl->resetServerInfo();
@@ -346,7 +354,8 @@ bool Network::connect(const char *ip, unsigned short port, std::string clientNam
         mImpl->currentConnectionAttemptAddress = RakNet::SystemAddress(ip, port);
         RakNet::ConnectionAttemptResult result = mImpl->peer->Connect(ip, port, password.c_str(), (int)password.length());
 
-        if (result == RakNet::CONNECTION_ATTEMPT_STARTED) {
+        if (result == RakNet::CONNECTION_ATTEMPT_STARTED)
+        {
 
             writeOutput(QString("Client connection attempt started for server: %1:%2").arg(ip, QString::number(port)));
             //mImpl->peer->SetPerConnectionOutgoingBandwidthLimit(mImpl->max_outgoing_speed_per_connection);
@@ -354,7 +363,8 @@ bool Network::connect(const char *ip, unsigned short port, std::string clientNam
             updateServerStatus(SS_IS_CONNECTING);
             return true;
         }
-        else {
+        else
+        {
             mImpl->isAttemptingConnection = false;
             switch (result) {
             case RakNet::INVALID_PARAMETER:
@@ -406,20 +416,25 @@ void Network::disconnect()
 
 void Network::requestSeat(int seatNumber)
 {
-    if (mImpl->isHost) {
-        if (seatNumber <= getMaxClients()) {
+    if (mImpl->isHost)
+    {
+        if (seatNumber <= (getMaxClients()+1))
+        {
             //Host has authority to grant its own permission
 
             auto it = mImpl->clientMap.find(mImpl->myGUID);
-            if (it != mImpl->clientMap.end()) {
+            if (it != mImpl->clientMap.end())
+            {
                 bool seatRequestAccepted = true;
                 if (it->second.seatNumber == seatNumber) {
                     seatRequestAccepted = false;
                 }
-                else if (seatNumber > 0) {
+                else if (seatNumber > 0)
+                {
                     for (auto& it2 : mImpl->clientMap)
                     {
-                        if (it2.second.seatNumber == seatNumber) {
+                        if (it2.second.seatNumber == seatNumber)
+                        {
                             //Someone already occupying the seat requested
                             seatRequestAccepted = false;
                             break;
@@ -427,7 +442,8 @@ void Network::requestSeat(int seatNumber)
                     }
                 }
 
-                if (seatRequestAccepted) {
+                if (seatRequestAccepted)
+                {
                     it->second.seatNumber = seatNumber;
                     emit receivedSeatChange(seatNumber);
                     mImpl->mySeat = seatNumber;
@@ -439,28 +455,117 @@ void Network::requestSeat(int seatNumber)
                         RakNet::BitStream bsOut;
                         bsOut.Write((RakNet::MessageID)ID_NET_CLIENT_SEAT_BROADCAST);
                         bsOut.Write(mImpl->myGUID);
-                        bsOut.WriteBitsFromIntegerRange(seatNumber, 0, MAX_CLIENTS);
+                        bsOut.WriteBitsFromIntegerRange(seatNumber, 0, (MAX_CLIENTS+1));
                         mImpl->peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, mImpl->serverAddress, true);
                     }
                 }
             }
         }
     }
-    else {
-        bool sendRequest = true;
+    else
+    {
         //Do not send request if same as current seat
-        if (mImpl->mySeat == seatNumber) {
-            sendRequest = false;
-        }
-
-        if (sendRequest) {
+        if (seatNumber != mImpl->mySeat)
+        {
             //Request seat change from the server
             RakNet::BitStream bsOut;
             bsOut.Write((RakNet::MessageID)ID_NET_CLIENT_SEAT_REQUEST);
-            bsOut.WriteBitsFromIntegerRange(seatNumber, 0, MAX_CLIENTS);
+            bsOut.WriteBitsFromIntegerRange(seatNumber, 0, (MAX_CLIENTS+1));
             mImpl->peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, mImpl->serverAddress, false);
         }
     }
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+void Network::kickClientFromSeat(const std::string& guidStr)
+{
+    RakNet::RakNetGUID guid;
+    if (mImpl->isHost && guid.FromString(guidStr.c_str()))
+    {
+        // If client is ourselves, use normal requestSeat method
+        if (guid == mImpl->myGUID)
+        {
+            requestSeat(0);
+        }
+        // Else if another client, inform all clients of seat change
+        else
+        {
+            auto it = mImpl->clientMap.find(guid);
+            if (it != mImpl->clientMap.end())
+            {
+                it->second.seatNumber = 0;
+                window->setSeat(guid.ToString(), 0);
+
+                //Inform all clients except myself
+                {
+                    RakNet::BitStream bsOut;
+                    bsOut.Write((RakNet::MessageID)ID_NET_CLIENT_SEAT_BROADCAST);
+                    bsOut.Write(guid);
+                    bsOut.WriteBitsFromIntegerRange(0, 0, (MAX_CLIENTS+1));
+                    mImpl->peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, mImpl->myGUID, true);
+                }
+            }
+            std::string clientName = getClientNameByGUID(guid);
+            writeOutput(QString("\"%1\" has been kicked from their seat - GUID: %2").arg(clientName.c_str(), guid.ToString()));
+        }
+    }
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+void Network::kickClientFromServer(const std::string& guidStr)
+{
+    RakNet::RakNetGUID guid;
+    // Don't allow kicking ourselves from the server
+    if (mImpl->isHost && guid.FromString(guidStr.c_str()) && (guid != mImpl->myGUID))
+    {
+        RakNet::SystemAddress address = mImpl->peer->GetSystemAddressFromGuid(guid);
+        if (address != RakNet::UNASSIGNED_SYSTEM_ADDRESS)
+        {
+            std::string addressStr = address.ToString(false);
+            std::string clientName = getClientNameByGUID(guid);
+            mImpl->peer->CloseConnection(address, true);
+            writeOutput(QString("\"%1\" has been kicked from the server - IP: %2    GUID: %3").arg(clientName.c_str(), addressStr.c_str(), guid.ToString()));
+        }
+    }
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+void Network::clearBanList()
+{
+    mImpl->peer->ClearBanList();
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+void Network::banIpFromServer(const std::string& ipStr)
+{
+    mImpl->peer->AddToBanList(ipStr.c_str());
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+bool Network::banClientFromServer(const std::string& guidStr)
+{
+    RakNet::RakNetGUID guid;
+    // Don't allow banning ourselves from the server
+    if (mImpl->isHost && guid.FromString(guidStr.c_str()) && (guid != mImpl->myGUID))
+    {
+        RakNet::SystemAddress address = mImpl->peer->GetSystemAddressFromGuid(guid);
+        if (address != RakNet::UNASSIGNED_SYSTEM_ADDRESS)
+        {
+            mImpl->peer->CloseConnection(address, true);
+            std::string addressStr = address.ToString(false);
+            mImpl->peer->AddToBanList(addressStr.c_str());
+            std::string clientName = getClientNameByGUID(guid);
+            writeOutput(QString("\"%1\" has been banned from the server - IP: %2    GUID: %3").arg(clientName.c_str(), addressStr.c_str(), guid.ToString()));
+            return true;
+        }
+    }
+
+    return false;
 }
 
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -568,7 +673,7 @@ void Network::update()
                     Client *client = &it.second;
                     bsOut.Write(client->ID);
                     bsOut.Write(client->name);
-                    bsOut.WriteBitsFromIntegerRange(client->seatNumber, 0, MAX_CLIENTS);
+                    bsOut.WriteBitsFromIntegerRange(client->seatNumber, 0, (MAX_CLIENTS+1));
                 }
 
                 peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
@@ -601,14 +706,16 @@ void Network::update()
             break;
         case ID_DISCONNECTION_NOTIFICATION:
         {
-            if (mImpl->isHost) {
+            if (mImpl->isHost)
+            {
                 int index = peer->GetIndexFromSystemAddress(packet->systemAddress);
                 RakNet::RakNetGUID guid = mImpl->hostClientIndexList[index];
                 mImpl->hostClientIndexList[index] = RakNet::UNASSIGNED_RAKNET_GUID;
 
                 //mImpl->newClientDisconnectList.push_back(guid);
 
-                if (guid != RakNet::UNASSIGNED_RAKNET_GUID) {
+                if (guid != RakNet::UNASSIGNED_RAKNET_GUID)
+                {
                     std::string clientNameStr = mImpl->removeClient(guid);
 
                     window->removeClient(guid.ToString());
@@ -633,14 +740,16 @@ void Network::update()
         }
         case ID_CONNECTION_LOST:
         {
-            if (mImpl->isHost) {
+            if (mImpl->isHost)
+            {
                 int index = peer->GetIndexFromSystemAddress(packet->systemAddress);
                 RakNet::RakNetGUID guid = mImpl->hostClientIndexList[index];
                 mImpl->hostClientIndexList[index] = RakNet::UNASSIGNED_RAKNET_GUID;
 
                 //mImpl->newClientDisconnectList.push_back(guid);
 
-                if (guid != RakNet::UNASSIGNED_RAKNET_GUID) {
+                if (guid != RakNet::UNASSIGNED_RAKNET_GUID)
+                {
                     std::string clientNameStr = mImpl->removeClient(guid);
 
                     window->removeClient(guid.ToString());
@@ -654,7 +763,8 @@ void Network::update()
                     peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, true);
                 }
             }
-            else {
+            else
+            {
                 mImpl->resetServerInfo();
                 writeOutput("<font color='red'>ERROR:</font> Connection to the server was lost.");
                 updateServerStatus(SS_NOT_CONNECTED);
@@ -671,13 +781,15 @@ void Network::update()
         case ID_NET_CLIENT_CONNECTED_NAME:
         {
             //received by the host only
-            if (mImpl->isHost) {
+            if (mImpl->isHost)
+            {
                 int clientIndex = peer->GetIndexFromSystemAddress(packet->systemAddress);
-                if (clientIndex >= 0) {
+                if (clientIndex >= 0)
+                {
                     RakNet::RakString rs = readBitStreamString(packet);
                     const char * clientName = rs.C_String();
                     std::string clientNameStr = std::string(clientName);
-                    RakNet::RakNetGUID guid = peer->GetGuidFromSystemAddress(packet->systemAddress);
+                    const RakNet::RakNetGUID& guid = peer->GetGuidFromSystemAddress(packet->systemAddress);
 
                     mImpl->clientNameMap.insert(std::pair<RakNet::RakNetGUID, std::string>(guid, clientNameStr));
 
@@ -711,7 +823,8 @@ void Network::update()
         case ID_NET_CLIENT_CONNECTED_BROADCAST:
         {
             //received by clients only
-            if (!mImpl->isHost) {
+            if (!mImpl->isHost)
+            {
                 Client client;
                 RakNet::RakString rs;
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
@@ -732,7 +845,8 @@ void Network::update()
         case ID_NET_CLIENT_DISCONNECTED_BROADCAST:
         {
             //received by clients only
-            if (!mImpl->isHost) {
+            if (!mImpl->isHost)
+            {
                 RakNet::RakNetGUID guid;
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
                 bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
@@ -751,7 +865,8 @@ void Network::update()
         case ID_NET_CLIENT_LOST_CONNECTION_BROADCAST:
         {
             //received by clients only
-            if (!mImpl->isHost) {
+            if (!mImpl->isHost)
+            {
                 RakNet::RakNetGUID guid;
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
                 bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
@@ -770,19 +885,22 @@ void Network::update()
         case ID_NET_CLIENT_LIST:
         {
             //received by clients only
-            if (!mImpl->isHost) {
+            if (!mImpl->isHost)
+            {
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
                 bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
                 unsigned short numberOfClients;
                 bsIn.Read(numberOfClients);
-                for (unsigned short us = 0; us < numberOfClients; us++) {
+                for (unsigned short us = 0; us < numberOfClients; us++)
+                {
                     Client client;
                     bsIn.Read(client.ID);
                     bsIn.Read(client.name);
-                    bsIn.ReadBitsFromIntegerRange(client.seatNumber, 0, MAX_CLIENTS);
+                    bsIn.ReadBitsFromIntegerRange(client.seatNumber, 0, (MAX_CLIENTS+1));
 
                     //skip my own client, as this is stored at connection
-                    if (client.ID != mImpl->myGUID) {
+                    if (client.ID != mImpl->myGUID)
+                    {
                         mImpl->clientMap.insert(std::pair<RakNet::RakNetGUID, Client>(client.ID, client));
                         mImpl->clientNameMap.insert(std::pair<RakNet::RakNetGUID, std::string>(client.ID, std::string(client.name.C_String())));
 
@@ -796,14 +914,14 @@ void Network::update()
                 }
 
                 window->setServerIP(getServerAddress().c_str());
-                //window->setMaxSeats(getMaxClients());
             }
             break;
         }
         case ID_NET_CLIENT_INFO:
         {
             //received by clients only
-            if (!mImpl->isHost) {
+            if (!mImpl->isHost)
+            {
                 mImpl->clientInfoList.clear();
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
                 bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
@@ -813,7 +931,8 @@ void Network::update()
                 //printf("Client Information:\n");
                 //printf("-------------------\n");
                 //printf(" # Name (ID)\t\t\tPing (ms)\n");
-                for (unsigned short us = 0; us < numberOfClients; us++) {
+                for (unsigned short us = 0; us < numberOfClients; us++)
+                {
                     ClientInfo clientInfo;
                     bsIn.Read(clientInfo.ID);
                     bsIn.ReadBitsFromIntegerRange(clientInfo.ping, -1, 2046);
@@ -822,7 +941,8 @@ void Network::update()
                     mImpl->clientInfoList.push_back(clientInfo);
                     //printf("[%hu] %s (%s)\t\t%d\n", us, clientInfo.name.c_str(), clientInfo.ID.ToString(), clientInfo.ping);
 
-                    if (clientInfo.ID == mImpl->myGUID) {
+                    if (clientInfo.ID == mImpl->myGUID)
+                    {
                         mImpl->myPing = clientInfo.ping;
                         window->setMyPing(mImpl->myPing);
                     }
@@ -835,38 +955,41 @@ void Network::update()
 
                     window->setPing(clientInfo.ID.ToString(), clientInfo.ping);
                 }
-                //for (auto fncn : mImpl->clientUpdateCallbackFunctions) {
-                //    fncn->run();
-                //}
             }
             break;
         }
         case ID_NET_CLIENT_SEAT_REQUEST:
         {
             //received by the host only
-            if (mImpl->isHost) {
+            if (mImpl->isHost)
+            {
                 int index = peer->GetIndexFromSystemAddress(packet->systemAddress);
                 RakNet::RakNetGUID guid = mImpl->hostClientIndexList[index];
 
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
                 bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
                 int seatNumber = 0;
-                bsIn.ReadBitsFromIntegerRange(seatNumber, 0, MAX_CLIENTS);
+                bsIn.ReadBitsFromIntegerRange(seatNumber, 0, (MAX_CLIENTS+1));
                 writeOutput(QString("Seat Request (%1) by: ").arg(seatNumber)+guid.ToString());
 
-                if (guid != RakNet::UNASSIGNED_RAKNET_GUID) {
+                if (guid != RakNet::UNASSIGNED_RAKNET_GUID)
+                {
                     //add latest seat info to client
-                    if (seatNumber <= getMaxClients()) {
+                    if (seatNumber <= (getMaxClients()+1))
+                    {
                         auto it = mImpl->clientMap.find(guid);
-                        if (it != mImpl->clientMap.end()) {
+                        if (it != mImpl->clientMap.end())
+                        {
                             bool seatRequestAccepted = true;
                             if (it->second.seatNumber == seatNumber) {
                                 seatRequestAccepted = false;
                             }
-                            else if (seatNumber > 0) {
+                            else if (seatNumber > 0)
+                            {
                                 for (auto& it2 : mImpl->clientMap)
                                 {
-                                    if (it2.second.seatNumber == seatNumber) {
+                                    if (it2.second.seatNumber == seatNumber)
+                                    {
                                         //Someone already occupying the seat requested
                                         seatRequestAccepted = false;
                                         break;
@@ -874,7 +997,8 @@ void Network::update()
                                 }
                             }
 
-                            if (seatRequestAccepted) {
+                            if (seatRequestAccepted)
+                            {
                                 it->second.seatNumber = seatNumber;
                                 window->setSeat(guid.ToString(), seatNumber);
 
@@ -883,7 +1007,7 @@ void Network::update()
                                     RakNet::BitStream bsOut;
                                     bsOut.Write((RakNet::MessageID)ID_NET_CLIENT_SEAT_BROADCAST);
                                     bsOut.Write(guid);
-                                    bsOut.WriteBitsFromIntegerRange(seatNumber, 0, MAX_CLIENTS);
+                                    bsOut.WriteBitsFromIntegerRange(seatNumber, 0, (MAX_CLIENTS+1));
                                     peer->Send(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_RAKNET_GUID, true);
                                 }
                             }
@@ -896,16 +1020,18 @@ void Network::update()
         case ID_NET_CLIENT_SEAT_BROADCAST:
         {
             //received by clients only
-            if (!mImpl->isHost) {
+            if (!mImpl->isHost)
+            {
                 RakNet::RakNetGUID guid;
                 RakNet::BitStream bsIn(packet->data, packet->length, false);
                 bsIn.IgnoreBytes(sizeof(RakNet::MessageID));
                 int seatNumber;
                 bsIn.Read(guid);
-                bsIn.ReadBitsFromIntegerRange(seatNumber, 0, MAX_CLIENTS);
+                bsIn.ReadBitsFromIntegerRange(seatNumber, 0, (MAX_CLIENTS+1));
                 writeOutput(QString("Seat Change (%1) by: ").arg(seatNumber)+guid.ToString());
 
-                if (guid == mImpl->myGUID) {
+                if (guid == mImpl->myGUID)
+                {
                     emit receivedSeatChange(seatNumber);
                     mImpl->mySeat = seatNumber;
                 }
@@ -939,7 +1065,8 @@ void Network::update()
                 emit receivedNetCommand(command);
                 writeOutput(QString("Net Command (%1)").arg(command));
 
-                if (mImpl->isHost) {
+                if (mImpl->isHost)
+                {
                     //pass along to all other clients except the sender
                     RakNet::BitStream bsOut;
                     bsOut.Write((RakNet::MessageID)ID_NET_COMMAND);
@@ -991,7 +1118,8 @@ void Network::update()
                        break;
                    case FLOAT16:
                        bsIn.ReadFloat16(value, -1.0f, 1.0f);
-                       if (bsIn.GetNumberOfUnreadBits() > 7) {
+                       if (bsIn.GetNumberOfUnreadBits() > 7)
+                       {
                            deadReckoned = true;
                            bsIn.ReadFloat16(valueRate, -maxValueRate, maxValueRate);
                            if (fabsf(valueRate) < 0.002f) {
@@ -1001,7 +1129,8 @@ void Network::update()
                        break;
                    case FLOAT32:
                        bsIn.Read(value);
-                       if (bsIn.GetNumberOfUnreadBits() > 7) {
+                       if (bsIn.GetNumberOfUnreadBits() > 7)
+                       {
                            deadReckoned = true;
                            bsIn.Read(valueRate);
                        }
@@ -1079,7 +1208,8 @@ void Network::update()
                emit receivedNetCommandValue(command, value, deadReckoned, valueRate);
                writeOutput(QString("Net Command (%1): ").arg(command)+QString::number((double)value)+(deadReckoned ? QString(", ") + QString::number((double)valueRate) : ""));
 
-               if (mImpl->isHost) {
+               if (mImpl->isHost)
+               {
                    //pass along to all other clients except the sender
                    RakNet::BitStream bsOut;
                    bsOut.Write((RakNet::MessageID)ID_NET_COMMAND_VALUE);
@@ -1186,7 +1316,7 @@ void Network::update()
            }
            break;
         }
-        case ID_NET_CORRECTION_COMMAND_VALUE:
+        case ID_NET_COMMAND_VALUE_CORRECTION:
         {
             if (mImpl->mySeat > 0 || mImpl->isHost)
             {
@@ -1202,10 +1332,11 @@ void Network::update()
                 emit receivedNetCommandValue(command, value, false, 0.0f);
                 writeOutput(QString("Net Command (%1): ").arg(command)+QString::number((double)value)+" (Corrected)");
 
-                if (mImpl->isHost) {
+                if (mImpl->isHost)
+                {
                     //pass along to all other clients except the sender
                     RakNet::BitStream bsOut;
-                    bsOut.Write((RakNet::MessageID)ID_NET_CORRECTION_COMMAND_VALUE);
+                    bsOut.Write((RakNet::MessageID)ID_NET_COMMAND_VALUE_CORRECTION);
                     bsOut.Write(command);
                     bsOut.Write(value);
                     mImpl->peer->Send(&bsOut, LOW_PRIORITY, RELIABLE, 0, packet->systemAddress, true);
@@ -1227,7 +1358,8 @@ void Network::update()
                 emit receivedNetEvent(eventID);
                 writeOutput(QString("Net Event (%1)").arg((int)eventID));
 
-                if (mImpl->isHost) {
+                if (mImpl->isHost)
+                {
                     //pass along to all other clients except the sender
                     RakNet::BitStream bsOut;
                     bsOut.Write((RakNet::MessageID)ID_NET_EVENT);
@@ -1243,59 +1375,27 @@ void Network::update()
         }
     }
 
-    //Now loop through all the movement packets
-    /*
-    {
-        for (auto& networkObject : mImpl->positionPackets)
-        {
-            if (networkObject.second.used == false)
-            {
-                networkObject.second.used = true;
-                mImpl->moveNetworkObject(networkObject.second);
-
-                //////////////////////////////////////////
-                // pass on latest position packets to all clients
-                if (mImpl->isHost) {
-                    RakNet::BitStream bsOut;
-                    bsOut.Write((RakNet::MessageID)ID_NET_OBJECT_MOVE);
-                    bsOut.Write(networkObject.second.timestamp);
-                    bsOut.Write(networkObject.second.networkID);
-                    bsOut.Write(networkObject.second.positionECEF.x);
-                    bsOut.Write(networkObject.second.positionECEF.y);
-                    bsOut.Write(networkObject.second.positionECEF.z);
-                    bsOut.WriteVector(
-                        networkObject.second.velocityLocal.x,
-                        networkObject.second.velocityLocal.y,
-                        networkObject.second.velocityLocal.z);
-                    bsOut.WriteNormQuat(
-                        networkObject.second.quaternionLocal.w,
-                        networkObject.second.quaternionLocal.x,
-                        networkObject.second.quaternionLocal.y,
-                        networkObject.second.quaternionLocal.z);
-
-                    mImpl->peer->Send(&bsOut, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0, networkObject.second.sender, true);
-                }
-            }
-        }
-
-    }
-    */
-
     //run callbacks for network status changes
-    if (mImpl->isHost)
+    if (mImpl->isHost) {
         mImpl->currentStatus = IS_HOSTING;
-    else
+    }
+    else {
         mImpl->currentStatus = static_cast<ConnectionState>(mImpl->peer->GetConnectionState(mImpl->peer->GetSystemAddressFromIndex(0)));
+    }
+
+    if (mImpl->currentStatus != mImpl->lastStatus) {
+    }
 
     mImpl->lastStatus = mImpl->currentStatus;
-
 
     mImpl->currentTime = RakNet::GetTime();
 
     //update client info as host more often
     RakNet::Time hostPingUpdateIntervalMS = 500; //every 0.5 second
-    if (mImpl->isHost) {
-        if (mImpl->currentTime - mImpl->hostPingTimeCtr > hostPingUpdateIntervalMS) {
+    if (mImpl->isHost)
+    {
+        if (mImpl->currentTime - mImpl->hostPingTimeCtr > hostPingUpdateIntervalMS)
+        {
             mImpl->clientInfoList.clear();
             {                
                 //add host info first
@@ -1306,7 +1406,8 @@ void Network::update()
                 mImpl->clientInfoList.push_back(client);
                 //window->setPing(mImpl->myGUID.ToString(), client.ping);
             }
-            for (auto const &it : mImpl->clientNameMap) {
+            for (auto const &it : mImpl->clientNameMap)
+            {
                 //add each client
                 ClientInfo client;
                 client.ID = it.first;
@@ -1315,9 +1416,6 @@ void Network::update()
                 mImpl->clientInfoList.push_back(client);
                 window->setPing(client.ID.ToString(), client.ping);
             }
-            //for (auto fncn : mImpl->clientUpdateCallbackFunctions) {
-            //    fncn->run();
-            //}
 
             mImpl->hostPingTimeCtr = mImpl->currentTime;
         }
@@ -1329,20 +1427,25 @@ void Network::update()
     if (mImpl->isHost)
     {
         size_t numberOfClientsReceiving = mImpl->clientMap.size() - 1;
-        if (numberOfClientsReceiving > 0) {
+        if (numberOfClientsReceiving > 0)
+        {
             RakNet::Time pingUpdateIntervalMS = 10000 / numberOfClientsReceiving;
-            if (mImpl->currentTime - mImpl->pingTimeCtr > pingUpdateIntervalMS) {
+            if (mImpl->currentTime - mImpl->pingTimeCtr > pingUpdateIntervalMS)
+            {
                 unsigned short clientIndex = getNextClientIndex(mImpl->lastClientIndexUpdated);
                 RakNet::RakNetGUID clientGUID = mImpl->hostClientIndexList[clientIndex];
-                if (clientGUID != RakNet::UNASSIGNED_RAKNET_GUID) {
+                if (clientGUID != RakNet::UNASSIGNED_RAKNET_GUID)
+                {
                     RakNet::BitStream bsOut;
                     bsOut.Write((RakNet::MessageID)ID_NET_CLIENT_INFO);
                     //Skip host info
                     unsigned short numberOfClients = (unsigned short)mImpl->clientInfoList.size() - 1;
                     bsOut.Write(numberOfClients);
-                    for (auto& clientInfo : mImpl->clientInfoList) {
+                    for (auto& clientInfo : mImpl->clientInfoList)
+                    {
                         ClientInfo *client = &clientInfo;
-                        if (client->ID != mImpl->myGUID) {
+                        if (client->ID != mImpl->myGUID)
+                        {
                             bsOut.Write(client->ID);
                             bsOut.WriteBitsFromIntegerRange(client->ping, -1, 2046);
                         }
@@ -1363,7 +1466,8 @@ void Network::update()
     uint64_t bandwidthReceivedTotal = 0;
     uint64_t connectionTime = 0;
 
-    if (mImpl->currentStatus == IS_CONNECTED || mImpl->isHost) {
+    if (mImpl->currentStatus == IS_CONNECTED || mImpl->isHost)
+    {
         numClients = getNumClients();
 
         bandwidthSendRate = getRecentBandwidth(ACTUAL_BYTES_SENT);
@@ -1563,10 +1667,11 @@ void Network::handleReceivedLocalCorrectionCommandValue(unsigned short command, 
 {
     if (mImpl->mySeat > 0)
     {
-        if (mImpl->currentStatus == IS_CONNECTED || mImpl->isHost) {
+        if (mImpl->currentStatus == IS_CONNECTED || mImpl->isHost)
+        {
 
             RakNet::BitStream bsOut;
-            bsOut.Write((RakNet::MessageID)ID_NET_CORRECTION_COMMAND_VALUE);
+            bsOut.Write((RakNet::MessageID)ID_NET_COMMAND_VALUE_CORRECTION);
 
             bsOut.Write(command);
             bsOut.Write(value);
@@ -1602,18 +1707,22 @@ bool Network::isClient() const
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 template<typename T>
-inline std::string toString(const T& val) {
+inline std::string toString(const T& val)
+{
     std::ostringstream o;
     o << val;
     return o.str();
 }
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 std::string Network::getServerAddress() const
 {
     if (mImpl->isHost) {
         return std::string("localhost:") + toString(mImpl->serverConfig.port);
     }
-    else if (mImpl->currentStatus == IS_CONNECTED) {
+    else if (mImpl->currentStatus == IS_CONNECTED)
+    {
         const char *serverAddress = mImpl->serverAddress.ToString(true, ':');
         return std::string(serverAddress);
     }
@@ -1626,8 +1735,10 @@ RakNet::Time Network::getConnectionTime()
 {
     if (mImpl->isHost)
         return mImpl->currentTime - mImpl->serverStartTime;
-    else if (mImpl->currentStatus == IS_CONNECTED) {
-        if (!mImpl->statisticsUpdated) {
+    else if (mImpl->currentStatus == IS_CONNECTED)
+    {
+        if (!mImpl->statisticsUpdated)
+        {
             if (mImpl->peer->GetStatistics(0, mImpl->myStatistics))
                 mImpl->statisticsUpdated = true;
         }
@@ -1686,8 +1797,10 @@ int Network::getMaxClients() const
 
 float Network::getMyPacketLoss()
 {
-    if (mImpl->currentStatus == IS_CONNECTED) {
-        if (!mImpl->statisticsUpdated) {
+    if (mImpl->currentStatus == IS_CONNECTED)
+    {
+        if (!mImpl->statisticsUpdated)
+        {
             if (mImpl->peer->GetStatistics(0, mImpl->myStatistics))
                 mImpl->statisticsUpdated = true;
             else
@@ -1702,8 +1815,10 @@ float Network::getMyPacketLoss()
 
 float Network::getMyRecentPacketLoss()
 {
-    if (mImpl->currentStatus == IS_CONNECTED) {
-        if (!mImpl->statisticsUpdated) {
+    if (mImpl->currentStatus == IS_CONNECTED)
+    {
+        if (!mImpl->statisticsUpdated)
+        {
             if (mImpl->peer->GetStatistics(0, mImpl->myStatistics))
                 mImpl->statisticsUpdated = true;
             else
@@ -1718,8 +1833,10 @@ float Network::getMyRecentPacketLoss()
 
 uint64_t Network::getBandwidth(ConnectionMetrics metric)
 {
-    if (mImpl->currentStatus == IS_CONNECTED) {
-        if (!mImpl->statisticsUpdated) {
+    if (mImpl->currentStatus == IS_CONNECTED)
+    {
+        if (!mImpl->statisticsUpdated)
+        {
             if (mImpl->peer->GetStatistics(0, mImpl->myStatistics))
                 mImpl->statisticsUpdated = true;
             else
@@ -1727,9 +1844,12 @@ uint64_t Network::getBandwidth(ConnectionMetrics metric)
         }
         return mImpl->myStatistics->runningTotal[metric];
     }
-    else if (mImpl->isHost) {
-        if (mImpl->peer->NumberOfConnections() > 0) {
-            if (!mImpl->statisticsUpdated) {
+    else if (mImpl->isHost)
+    {
+        if (mImpl->peer->NumberOfConnections() > 0)
+        {
+            if (!mImpl->statisticsUpdated)
+            {
                 mImpl->myStatistics = mImpl->peer->GetStatistics(RakNet::UNASSIGNED_SYSTEM_ADDRESS, mImpl->myStatistics);
                 mImpl->statisticsUpdated = true;
             }
@@ -1745,8 +1865,10 @@ uint64_t Network::getBandwidth(ConnectionMetrics metric)
 
 uint64_t Network::getRecentBandwidth(ConnectionMetrics metric)
 {
-    if (mImpl->currentStatus == IS_CONNECTED) {
-        if (!mImpl->statisticsUpdated) {
+    if (mImpl->currentStatus == IS_CONNECTED)
+    {
+        if (!mImpl->statisticsUpdated)
+        {
             if (mImpl->peer->GetStatistics(0, mImpl->myStatistics))
                 mImpl->statisticsUpdated = true;
             else
@@ -1754,9 +1876,12 @@ uint64_t Network::getRecentBandwidth(ConnectionMetrics metric)
         }
         return mImpl->myStatistics->valueOverLastSecond[metric];
     }
-    else if (mImpl->isHost) {
-        if (mImpl->peer->NumberOfConnections() > 0) {
-            if (!mImpl->statisticsUpdated) {
+    else if (mImpl->isHost)
+    {
+        if (mImpl->peer->NumberOfConnections() > 0)
+        {
+            if (!mImpl->statisticsUpdated)
+            {
                 mImpl->myStatistics = mImpl->peer->GetStatistics(RakNet::UNASSIGNED_SYSTEM_ADDRESS, mImpl->myStatistics);
                 mImpl->statisticsUpdated = true;
             }
@@ -1772,7 +1897,8 @@ uint64_t Network::getRecentBandwidth(ConnectionMetrics metric)
 
 std::string Network::getClientNameByGUID(RakNet::RakNetGUID guid) const
 {
-    if (guid != RakNet::UNASSIGNED_RAKNET_GUID && mImpl->clientNameMap.size() > 0) {
+    if (guid != RakNet::UNASSIGNED_RAKNET_GUID && mImpl->clientNameMap.size() > 0)
+    {
         const auto& it = mImpl->clientNameMap.find(guid);
         if (it != mImpl->clientNameMap.end()) {
             return it->second;
@@ -1792,6 +1918,28 @@ Client* Network::getClientByGUID(RakNet::RakNetGUID guid) const
     }
 
     return nullptr;
+}
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+std::string Network::getClientAddress(const std::string& guidStr) const
+{
+    std::string clientAddress = "";
+
+    RakNet::RakNetGUID guid;
+    if (mImpl->isHost && guid.FromString(guidStr.c_str()))
+    {
+        if (guid != mImpl->myGUID)
+        {
+            RakNet::SystemAddress address = mImpl->peer->GetSystemAddressFromGuid(guid);
+            if (address != RakNet::UNASSIGNED_SYSTEM_ADDRESS)
+            {
+                clientAddress = address.ToString(false);
+            }
+        }
+    }
+
+    return clientAddress;
 }
 
 //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1874,12 +2022,14 @@ const std::vector<ClientInfo>& Network::getClientInfo() const
 
 unsigned short Network::getNextClientIndex(unsigned short index)
 {
-    if (index >= 0 && index < MAX_CLIENTS) {
+    if (index >= 0 && index < MAX_CLIENTS)
+    {
         //RakNet::SystemAddress remoteSystems[MAX_CLIENTS];
         //unsigned short numberOfSystems = MAX_CLIENTS;
         //mImpl->peer->GetConnectionList(remoteSystems, &numberOfSystems);
         int nextIndex = index + 1;
-        while (nextIndex != index) {
+        while (nextIndex != index)
+        {
             if (nextIndex >= MAX_CLIENTS)
                 nextIndex = 0;
 
@@ -1899,9 +2049,11 @@ unsigned short Network::getNextClientIndex(unsigned short index)
 RakNet::RakNetGUID Network::getNextClientGUID(RakNet::RakNetGUID guid)
 {
     int index = mImpl->peer->GetIndexFromSystemAddress(mImpl->peer->GetSystemAddressFromGuid(guid));
-    if (index >= 0 && index < MAX_CLIENTS) {
+    if (index >= 0 && index < MAX_CLIENTS)
+    {
         int nextIndex = index + 1;
-        while (nextIndex != index) {
+        while (nextIndex != index)
+        {
             if (nextIndex >= MAX_CLIENTS)
                 nextIndex = 0;
             RakNet::RakNetGUID guid = mImpl->hostClientIndexList[nextIndex];

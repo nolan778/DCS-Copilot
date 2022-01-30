@@ -21,6 +21,7 @@ INCLUDES
 #include <QMainWindow>
 #include <QLabel>
 
+#include "banlistwindow.h"
 #include "settingswindow.h"
 #include "serverstart.h"
 #include "connectionwindow.h"
@@ -102,7 +103,13 @@ public:
     void setPing(const QString& id, int ping);
     void setMyPing(int ping);
     void setMaxSeats(unsigned char seatNumber);
-    void setStatistics(int numClients, uint64_t bandwidthSendRate, uint64_t bandwidthReceiveRate, uint64_t bandwidthSentTotal, uint64_t bandwidthReceivedTotal, uint64_t connectionTime, float myPacketLoss);
+    void setStatistics(int numClients,
+                       uint64_t bandwidthSendRate,
+                       uint64_t bandwidthReceiveRate,
+                       uint64_t bandwidthSentTotal,
+                       uint64_t bandwidthReceivedTotal,
+                       uint64_t connectionTime,
+                       float myPacketLoss);
     void resetStatistics();
     void clearClients();
 
@@ -115,10 +122,15 @@ private slots:
     void updateLocalNetwork();
     void updateNetwork();
     void startServer();
-    void connectToServer(/*const QString& clientName, const QString& ip, const QString& port, const QString& password*/);
+    void connectToServer();
+    void kickClientFromSeat();
+    void kickClientFromServer();
+    void banClientFromServer();
+    void HandleIndicatorChanged(int logicalIndex, Qt::SortOrder eSort);
 
     void on_actionStart_Listener_triggered();
     void on_actionStop_Listener_triggered();
+    void on_actionBan_List_triggered();
     void on_actionSettings_triggered();
     void on_actionStart_Server_triggered();
     void on_actionConnect_triggered();
@@ -126,17 +138,22 @@ private slots:
     void on_actionAbout_triggered();
 
     void on_pushButton_clicked();
-
     void on_pushButton_2_clicked();
-
     void on_pushButton_3_clicked();
+
+    void on_tableWidget_customContextMenuRequested(const QPoint &pos);
 
 private:
     Ui::MainWindow* ui;
     SettingsWindow* settingsWindow;
+    BanListWindow* banListWindow;
     ServerStart* serverStart;
     ConnectionWindow* connectionWindow;
     AboutWindow* aboutWindow;
+    unsigned int clientConnectionIndex;
+    int contextMenuRowAction;
+    int prevClientSortIndex;
+    Qt::SortOrder prevClientSortOrder;
     void closeProgram();
     void startLocalServer();
     void stopLocalServer();
