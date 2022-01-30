@@ -2,7 +2,7 @@
 
 Copyright (c) 2022, Cory Parks and contributors
 
-[Imgur](https://i.imgur.com/BE83Dd9.png)
+![Image](https://i.imgur.com/BE83Dd9.png)
 
 ## Description
 DCS Copilot is a standalone windows client application that utilizes the [RakNet](https://github.com/facebookarchive/RakNet) 
